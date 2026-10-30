@@ -35,3 +35,19 @@ class Plan:
 
     def latlon(self, x, y):
         return self.lat0 + y / 111320, self.lon0 + x / self.k
+
+
+class Cap:
+    """Direction de marche (degrés), lissée, à partir des positions successives."""
+
+    def __init__(self):
+        self.valeur, self.dernier = None, None
+
+    def maj(self, p):
+        if self.dernier is None:
+            self.dernier = p
+        elif haversine(self.dernier, p) >= 4:
+            nouveau = cap_entre(self.dernier, p)
+            self.valeur = nouveau if self.valeur is None else (self.valeur + 0.6 * ecart(self.valeur, nouveau)) % 360
+            self.dernier = p
+        return self.valeur
