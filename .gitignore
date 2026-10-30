@@ -1,0 +1,9 @@
+.buildozer/
+bin/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+cache/
+elev_cache.json
+*.tmp
