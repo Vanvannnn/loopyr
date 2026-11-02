@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 256" role="img"><title>Loop R</title>
+<g transform="translate(13 -9)">
+<g transform="translate(20 0) skewX(-12)">
+  <path d="M76 226V48H140A47 47 0 0 1 140 142H76" fill="none" stroke="#000" stroke-width="36" stroke-linejoin="miter"/>
+  <path d="M112 124H150L214 226H170Z" fill="#000"/>
+</g>
+<circle cx="65.81" cy="142" r="27" fill="#fff"/>
+<circle cx="65.81" cy="142" r="13" fill="#000"/>
+</g>
+<g transform="translate(272 78) scale(1.0) skewX(-12)">
+  <path fill="none" stroke="#000" stroke-width="18" stroke-linejoin="miter" d="M9 0V91H50"/>
+  <rect fill="none" stroke="#000" stroke-width="18" x="63" y="41" width="36" height="50" rx="18"/>
+  <rect fill="none" stroke="#000" stroke-width="18" x="125" y="41" width="36" height="50" rx="18"/>
+  <path fill="none" stroke="#000" stroke-width="18" d="M187 32V134M187 41H202A18 18 0 0 1 220 59V73A18 18 0 0 1 202 91H187"/>
+  <path fill="none" stroke="#000" stroke-width="18" stroke-linejoin="miter" d="M262 100V9H282A23 23 0 0 1 282 55H262"/>
+  <path fill="#000" d="M270 55H291L318 100H297Z"/>
+</g>
+</svg>

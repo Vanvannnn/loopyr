@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 4 182 58" role="img" aria-labelledby="titre">
+  <title id="titre">Loop R</title>
+  <!-- Lettrage dessiné, pas une police : un seul trait de 7, comme une trace GPS.
+       Les O sont des pistes d'athlétisme (deux droites, deux virages). Le R est la boucle :
+       il part du point, fait le tour et revient au même point, puis la jambe s'élance. -->
+  <style>
+    .trait { fill: none; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+    .encre { stroke: var(--loopr-encre, #0D1726); }
+    .boucle { stroke: var(--loopr-boucle, #2443E6); }
+    .depart { fill: var(--loopr-signal, #C8F031); stroke: var(--loopr-anneau, #0D1726); stroke-width: 2.4; }
+    @media (prefers-color-scheme: dark) {
+      .encre { stroke: var(--loopr-encre, #E8EDF3); }
+      .boucle { stroke: var(--loopr-boucle, #6380FF); }
+    }
+    /* à l'affichage : les lettres se tracent, puis le point de départ se pose sur le R */
+    @media (prefers-reduced-motion: no-preference) {
+      .trait { stroke-dasharray: 1; stroke-dashoffset: 1; animation: tracer .7s cubic-bezier(.65, 0, .35, 1) forwards; }
+      .l2 { animation-delay: .08s; } .l3 { animation-delay: .16s; } .l4 { animation-delay: .24s; }
+      .l5 { animation-delay: .4s; animation-duration: .9s; }
+      .depart { transform-box: fill-box; transform-origin: center;
+                animation: poser .4s cubic-bezier(.34, 1.56, .64, 1) 1.1s both; }
+    }
+    @keyframes tracer { to { stroke-dashoffset: 0; } }
+    @keyframes poser { from { transform: scale(0); } }
+  </style>
+  <g transform="translate(10 0) skewX(-10)">
+    <path class="trait encre l1" pathLength="1" d="M4 12V54H24"/>
+    <rect class="trait encre l2" pathLength="1" x="34" y="12" width="24" height="42" rx="12"/>
+    <rect class="trait encre l3" pathLength="1" x="68" y="12" width="24" height="42" rx="12"/>
+    <path class="trait encre l4" pathLength="1" d="M102 54V12H110C120 12 124 18 124 24C124 31 119 36 110 36H102"/>
+    <path class="trait boucle l5" pathLength="1" d="M144 54V12H152C162 12 166 18 166 24C166 31 161 36 152 36H144M153 36L167 54"/>
+  </g>
+  <!-- hors du groupe incliné : le point reste rond. Position = (144, 36) inclinée de -10° puis +10 -->
+  <circle class="depart" cx="147.65" cy="36" r="6"/>
+</svg>

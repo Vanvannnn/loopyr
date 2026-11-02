@@ -1,4 +1,4 @@
-"""Export d'un fichier GPX : Téléchargements/Starva sur Android (puis menu Partager), un dossier local sur PC."""
+"""Export d'un fichier GPX : Téléchargements/Loopy sur Android (puis menu Partager), un dossier local sur PC."""
 import os
 
 from kivy.utils import platform
@@ -21,7 +21,7 @@ def exporter(nom_fichier, texte, dossier_pc):
     valeurs = autoclass("android.content.ContentValues")()
     valeurs.put("_display_name", nom_fichier)
     valeurs.put("mime_type", "application/gpx+xml")
-    valeurs.put("relative_path", "Download/Starva")
+    valeurs.put("relative_path", "Download/Loopy")
     resolver = act.getContentResolver()
     uri = resolver.insert(autoclass("android.provider.MediaStore$Downloads").EXTERNAL_CONTENT_URI, valeurs)
     sortie = resolver.openOutputStream(uri)
@@ -34,4 +34,4 @@ def exporter(nom_fichier, texte, dossier_pc):
     envoi.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
     envoi.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     act.startActivity(Intent.createChooser(envoi, chaine("Partager la course")))
-    return "GPX enregistré dans Téléchargements/Starva"
+    return "GPX enregistré dans Téléchargements/Loopy"

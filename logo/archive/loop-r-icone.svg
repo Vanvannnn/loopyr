@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="titre">
+  <title id="titre">Loop R</title>
+  <!-- Icône d'app : le R blanc sur cobalt, le point de départ en signal. Le symbole tient dans
+       le cercle central de 66 % : il survit aux masques ronds, carrés et « squircle » d'Android. -->
+  <rect width="512" height="512" fill="#2443E6"/>
+  <g transform="translate(67 54.4) scale(8.4)">
+    <path fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"
+          transform="translate(5.5 0) skewX(-10)" d="M14 39V9H20C27 9 30 13.5 30 17.5C30 22.5 26.5 26 20 26H14M20.5 26L31 39"/>
+    <circle cx="14.92" cy="26" r="4.4" fill="#C8F031" stroke="#2443E6" stroke-width="1.8"/>
+  </g>
+</svg>

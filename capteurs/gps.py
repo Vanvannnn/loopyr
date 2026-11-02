@@ -36,7 +36,7 @@ class Gps:
 
     def _reponse(self, perms, results):  # réponse à la fenêtre d'autorisation
         if not any(results[:2]):
-            self.etat("GPS : localisation refusée (Réglages > Applis > Starva > Autorisations)")
+            self.etat("GPS : localisation refusée (Réglages > Applis > Loopy > Autorisations)")
 
     def _attendre(self, dt):
         if self.demarre:

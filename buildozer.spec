@@ -1,12 +1,15 @@
 [app]
-title = Starva
+title = Loopy
 package.name = starva
 package.domain = org.starva
 source.dir = .
-source.include_exts = py,db
-source.exclude_dirs = tests, cache, bin, .venv, .git
+source.include_exts = py,db,ttf
+icon.filename = %(source.dir)s/logo/icone.png
+presplash.filename = %(source.dir)s/logo/lancement.png
+android.presplash_color = #F4EFE6
+source.exclude_dirs = tests, cache, bin, .venv, .git, logo
 source.exclude_patterns = prepare_data.py, elev_cache.json, requirements-*.txt
-version = 0.2
+version = 0.3
 requirements = hostpython3==3.11.5,python3==3.11.5,kivy==2.3.1,plyer,pyjnius,sqlite3,android
 orientation = portrait
 # GPS de la course : tourne en premier plan, même écran éteint (classe Java org.starva.starva.ServiceSuivi)

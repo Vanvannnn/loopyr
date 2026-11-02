@@ -1,18 +1,19 @@
 """Écran 1 : préparer la boucle (distance, D+, terrain, départ) et la générer."""
 import threading
 
+from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.screenmanager import Screen
-from kivy.uix.spinner import Spinner
-from kivy.uix.textinput import TextInput
 from kivy.utils import platform
 
 from ui.carte import Trace, avec_zoom
-from ui.widgets import ARDOISE, BLANC, GRIS, bouton, lab
+from ui.logo import Symbole
+from ui import widgets
+from ui.widgets import BRUME, FOND, MARQUE, SIGNAL, Bouton, Pas, Segmente, apparaitre, fond, lab, nombre
 
-MA_POSITION, SUR_LA_CARTE = "Ma position", "Choisir sur la carte"
+MA_POSITION, SUR_LA_CARTE = "gps", "carte"
 
 
 def lire_parametres(km, dplus, distance_max):
@@ -33,38 +34,60 @@ class EcranPlan(Screen):
     def __init__(self, app, **kw):
         super().__init__(name="plan", **kw)
         self.app, self.res, self.note, self.depart_choisi, self.calcul = app, None, "", None, False
-        col = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
-        titres = BoxLayout(size_hint_y=None, height=dp(22), spacing=dp(8))
-        for t in ("Distance (km)", "Dénivelé + (m)", "Terrain"):
-            titres.add_widget(lab(t, 13, GRIS))
-        ligne = BoxLayout(size_hint_y=None, height=dp(64), spacing=dp(8))
-        champ = dict(font_size="26sp", multiline=False, padding=[dp(14), dp(16), dp(14), dp(8)],
-                     background_color=(0.16, 0.18, 0.20, 1), foreground_color=BLANC)
-        self.km = TextInput(text="5", input_filter="float", **champ)
-        self.champ_dplus = TextInput(text="80", input_filter="int", **champ)
-        self.pref = Spinner(text="hybride", values=("hybride", "trail", "route"), font_size="20sp",
-                            background_normal="", background_color=ARDOISE)
-        for w in (self.km, self.champ_dplus, self.pref):
-            ligne.add_widget(w)
-        self.sel_depart = Spinner(text=MA_POSITION, values=(MA_POSITION, SUR_LA_CARTE),
-                                  font_size="20sp", size_hint_y=None, height=dp(56),
-                                  background_normal="", background_color=ARDOISE)
-        self.sel_depart.bind(text=self.changer_depart)
-        self.btn_generer = bouton("Générer la boucle", self.generer)
-        self.info = lab("Chargement de la carte…", 18, size_hint_y=None, height=dp(52))
-        self.l_gps = lab("", 14, GRIS, size_hint_y=None, height=dp(44))
+        col = BoxLayout(orientation="vertical")
+
+        # la carte en grand, avec la marque et l'historique posés dessus
         self.trace = Trace()
-        bas = BoxLayout(size_hint_y=None, height=dp(64), spacing=dp(8))
-        bas.add_widget(bouton("Démarrer la course", self.demarrer))
-        bas.add_widget(bouton("Mon profil", lambda *_: setattr(app.sm, "current", "profil"),
-                              ARDOISE, BLANC))
-        for w in (titres, ligne, self.sel_depart, self.btn_generer, self.info, self.l_gps,
-                  avec_zoom(self.trace), bas):
-            col.add_widget(w)
+        carte = avec_zoom(self.trace)
+        marque = BoxLayout(size_hint=(None, None), size=(dp(114), dp(44)), spacing=dp(6),
+                           padding=[dp(6), dp(4), dp(12), dp(4)], pos_hint={"x": 0.03, "top": 0.97})
+        fond(marque, (*FOND[:3], 0.94), dp(12))
+        # point pêche cerclé d'encre le jour (la pêche seule ne se voit pas sur le lin), plein la nuit
+        self.symbole = Symbole(MARQUE, SIGNAL, MARQUE if widgets.theme == "jour" else SIGNAL,
+                               size_hint=(None, None), size=(dp(36), dp(36)))
+        marque.add_widget(self.symbole)
+        marque.add_widget(lab("Loopy", 27, gras=True, chiffres=True))
+        carte.add_widget(marque)
+        haut = BoxLayout(size_hint=(None, None), size=(dp(212), dp(44)), spacing=dp(8),
+                         pos_hint={"right": 0.97, "top": 0.97})
+        haut.add_widget(Bouton("Jour" if widgets.theme == "nuit" else "Nuit", lambda *_: app.changer_theme(), "carte", 44,
+                               16, size_hint_x=0.7))
+        haut.add_widget(Bouton("Historique", lambda *_: app.aller("profil"), "carte", 44, 16))
+        carte.add_widget(haut)
+        col.add_widget(carte)
+
+        # les réglages, à portée de pouce
+        panneau = BoxLayout(orientation="vertical", size_hint_y=None, padding=[dp(20), dp(12), dp(20), dp(18)],
+                            spacing=dp(8))
+        fond(panneau, FOND)
+        self.info = lab("Chargement de la carte…", 19, gras=True, size_hint_y=None, height=dp(30))
+        self.l_gps = lab("", 14, BRUME, size_hint_y=None, height=dp(22))
+        self.km = Pas("Distance", "km", 5, 0.5, 1, 40, decimales=1)
+        self.champ_dplus = Pas("Dénivelé", "m D+", 80, 10, 0, 750)
+        self.km.bind(valeur=lambda w, v: self.champ_dplus.borner(maxi=int(v * 150 // 10 * 10)))
+        self.pref = Segmente((("route", "Route"), ("hybride", "Mixte"), ("trail", "Trail")), "hybride")
+        self.sel_depart = Segmente(((MA_POSITION, "De ma position"), (SUR_LA_CARTE, "D'un point choisi")),
+                                   MA_POSITION)
+        self.sel_depart.bind(choix=self.changer_depart)
+        self.bas = BoxLayout(size_hint_y=None, height=dp(72), spacing=dp(10))
+        self.btn_generer = Bouton("Générer une boucle", self.generer, "encre", 72, 20)
+        self.btn_partir = Bouton("Partir", self.demarrer, "signal", 72, 22, size_hint_x=0)
+        self.bas.add_widget(self.btn_generer)
+        for w in (self.info, self.l_gps, self.km, self.champ_dplus, self.pref, self.sel_depart,
+                  BoxLayout(size_hint_y=None, height=dp(4)), self.bas):
+            panneau.add_widget(w)
+        panneau.height = sum(w.height for w in panneau.children) + dp(8) * 7 + dp(30)
+        col.add_widget(panneau)
         self.add_widget(col)
 
+    def on_enter(self, *_):
+        if not self.app.logo_vu:  # une fois par lancement : la boucle du logo se trace
+            self.app.logo_vu = True
+            self.symbole.animer()
+
     def carte_prete(self):
-        self.info.text = "Carte prête"
+        self.km.borner(maxi=self.app.carte.distance_max // 500 / 2)
+        self.info.text = "Règle ta sortie, puis génère une boucle"
 
     def etat_gps(self, texte):
         self.l_gps.text = texte
@@ -73,13 +96,35 @@ class EcranPlan(Screen):
         self.trace.cap = cap
         self.trace.moi = [lat, lon]
 
-    def changer_depart(self, _, texte):
-        choisir = texte == SUR_LA_CARTE
+    def boucle_prete(self, prete, animer=True):
+        """Une boucle affichée : « Partir » s'ouvre en glissant depuis la droite et devient l'action
+        principale ; « Générer » se resserre et passe au second plan. Et l'inverse."""
+        b, g = self.btn_partir, self.btn_generer
+        if prete == (b.parent is not None):
+            return
+        if prete:
+            self.bas.add_widget(b)
+            g.text, g.style = "Autre boucle", "contour"
+        else:
+            g.text, g.style = "Générer une boucle", "encre"
+        for w, cible in ((b, 1 if prete else 0), (g, 0.8 if prete else 1)):
+            Animation.cancel_all(w, "size_hint_x")
+            if animer:
+                Animation(size_hint_x=cible, d=0.34, t="out_cubic").start(w)
+            else:
+                w.size_hint_x = cible
+        if not prete:
+            Clock.schedule_once(lambda dt: b.parent and b.size_hint_x < 0.01 and self.bas.remove_widget(b),
+                                0.36 if animer else 0)
+
+    def changer_depart(self, _, valeur):
+        choisir = valeur == SUR_LA_CARTE
         self.trace.choix = self.point_choisi if choisir else None
         if choisir:  # vue d'ensemble de la zone, pour pouvoir toucher la carte
             self.res = None
             self.trace.coords = []
-            self.info.text = "Touche la carte pour choisir ton départ"
+            self.boucle_prete(False)
+            self.info.text = "Touche la carte pour placer ton départ"
         else:
             self.depart_choisi = None
             self.trace.depart = []
@@ -87,19 +132,19 @@ class EcranPlan(Screen):
     def point_choisi(self, lat, lon):
         self.depart_choisi = (lat, lon)
         self.trace.depart = [lat, lon]
-        self.info.text = "Départ choisi : génère ta boucle"
+        self.info.text = "Départ placé : génère ta boucle"
 
     def point_depart(self):
         """Renvoie (noeud de départ, message) : le point choisi, ou la position du téléphone."""
         carte = self.app.carte
-        if self.sel_depart.text == SUR_LA_CARTE:
+        if self.sel_depart.choix == SUR_LA_CARTE:
             pt, hors = self.depart_choisi, "Ce point est hors de la zone embarquée"
             if pt is None:
-                return None, "Touche la carte pour choisir ton départ"
+                return None, "Touche la carte pour placer ton départ"
         else:
             pt, hors = self.app.gps_pos, "Tu es hors de la zone embarquée"
             if pt is None:
-                return carte.depart, "pas de GPS : départ au centre de la zone"
+                return carte.depart, "Pas de GPS : départ au centre de la zone"
         if not carte.dans_zone(*pt):
             return carte.depart, hors + " : départ au centre"
         return carte.plus_proche(*pt), ""
@@ -115,9 +160,9 @@ class EcranPlan(Screen):
         if dep is None:
             self.info.text = self.note
             return
-        self.calcul, self.btn_generer.disabled = True, True
-        self.info.text = "Calcul en cours…"
-        threading.Thread(target=self._calcul, args=(*params, self.pref.text, dep), daemon=True).start()
+        self.calcul, self.btn_generer.disabled, self.btn_partir.disabled = True, True, True
+        self.info.text = "Recherche d'une boucle…"
+        threading.Thread(target=self._calcul, args=(*params, self.pref.choix, dep), daemon=True).start()
 
     def _calcul(self, dist, d_plus, pref, dep):
         try:
@@ -127,15 +172,23 @@ class EcranPlan(Screen):
             print(f"Génération : {err}")
         Clock.schedule_once(lambda dt: self.afficher(res))
 
-    def afficher(self, res):
-        self.calcul, self.btn_generer.disabled = False, False
+    def afficher(self, res, animer=True):
+        self.calcul, self.btn_generer.disabled, self.btn_partir.disabled = False, False, False
         if not res:
             self.info.text = "Aucune boucle trouvée : change la distance ou le D+"
+            apparaitre(self.info)
             return
         self.res = res
-        self.trace.coords = res["coords"]
-        txt = f"{res['distance'] / 1000:.1f} km   D+ {res['denivele']:.0f} m"
-        self.info.text = txt + (f"\n({self.note})" if self.note else "")
+        if animer:
+            self.trace.tracer(res["coords"])
+        else:
+            self.trace.coords = res["coords"]
+        self.boucle_prete(True, animer)
+        self.info.text = f"Boucle de {nombre(res['distance'] / 1000)} km, {res['denivele']:.0f} m de D+"
+        if animer:
+            apparaitre(self.info)
+        if self.note:
+            self.l_gps.text = self.note
 
     def demarrer(self, *_):
         if not self.res:
@@ -143,7 +196,7 @@ class EcranPlan(Screen):
             return
         if platform == "android":
             if not self.app.gps_pos or self.app.gps_age > 30:
-                self.info.text = "En attendant le signal GPS, ne pars pas encore (voir l'état GPS)"
+                self.info.text = "Attends le signal GPS avant de partir"
                 return
             if self.app.gps_prec and self.app.gps_prec > 30:
                 self.info.text = f"GPS encore imprécis ({self.app.gps_prec:.0f} m) : attends un peu"

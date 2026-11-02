@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img"><title>Loop R</title>
+<g transform="translate(13 -9)">
+<g transform="translate(20 0) skewX(-12)">
+  <path d="M76 226V48H140A47 47 0 0 1 140 142H76" fill="none" stroke="#000" stroke-width="36" stroke-linejoin="miter"/>
+  <path d="M112 124H150L214 226H170Z" fill="#000"/>
+</g>
+<circle cx="65.81" cy="142" r="27" fill="#fff"/>
+<circle cx="65.81" cy="142" r="13" fill="#000"/>
+</g>
+</svg>

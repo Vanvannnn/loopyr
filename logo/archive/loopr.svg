@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 166 48" role="img" aria-labelledby="titre">
+  <title id="titre">Loopr</title>
+  <style>
+    .boucle { fill: none; stroke: var(--loopr-boucle, #2443E6); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round;
+              stroke-dasharray: 1; stroke-dashoffset: 0; }
+    .depart { fill: var(--loopr-signal, #C8F031); stroke: var(--loopr-anneau, #0D1726); stroke-width: 1.6;
+              transform-box: fill-box; transform-origin: center; }
+    .nom { fill: var(--loopr-encre, #0D1726); font-family: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+           font-weight: 800; font-size: 40px; letter-spacing: -0.4px; }
+    @media (prefers-color-scheme: dark) {
+      .boucle { stroke: var(--loopr-boucle, #5B78FF); }
+      .nom { fill: var(--loopr-encre, #E8EDF3); }
+    }
+    /* à l'affichage : le point de départ apparaît, puis la boucle se trace depuis lui */
+    @media (prefers-reduced-motion: no-preference) {
+      .boucle { stroke-dashoffset: 1; animation: tracer 0.9s cubic-bezier(.65, 0, .35, 1) 0.15s forwards; }
+      .depart { animation: poser 0.35s cubic-bezier(.34, 1.56, .64, 1) both; }
+    }
+    @keyframes tracer { to { stroke-dashoffset: 0; } }
+    @keyframes poser { from { transform: scale(0); opacity: 0; } }
+  </style>
+  <path class="boucle" pathLength="1" d="M10 38C10 26 17 9 30 8C40 7.4 43.5 16.5 38 23.5C32 31 21 35 16.2 36.3"/>
+  <circle class="depart" cx="10" cy="38" r="4.6"/>
+  <text class="nom" x="50" y="38.5">Loopr</text>
+</svg>

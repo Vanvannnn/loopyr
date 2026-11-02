@@ -2,32 +2,82 @@
 sur PC) y écrit les positions, cet écran le relit toutes les 0,5 s pour afficher la course."""
 import time
 
+from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.core.window import Window
-from kivy.graphics import Color, Rectangle
+from kivy.graphics import Color, Ellipse, Line
 from kivy.metrics import dp
+from kivy.properties import NumericProperty
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
 from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.popup import Popup
 from kivy.uix.screenmanager import Screen
 from kivy.uix.scrollview import ScrollView
 from kivy.utils import platform
 
 from annonces import Annonceur
 from capteurs.voix import Voix
-from course import fmt_allure, fmt_temps
+from course import fmt_allure
 from geo import Cap, ecart
 from journal import appliquer
 from progression import Progression
 from ui.carte import Trace, avec_zoom
-from ui.widgets import ARDOISE, BLANC, CORAIL, FOND, GRIS, MINT, bouton, choix, confirmer, lab
+from ui.widgets import (BRUME, ENCRE, FOND, FOND_2, SIGNAL, SUR_SIGNAL, TRACE, Bande, Bouton, Feuille, Splits, choix,
+                        confirmer, echelle, fond, lab, nombre, pulser, unite)
 
-ORIENTS = {"marche": "Cap : marche", "boussole": "Cap : boussole", "nord": "Cap : nord"}
+ORIENTS = {"marche": "Sens de course", "boussole": "Boussole", "nord": "Nord en haut"}
 
 
-def texte_splits(splits):
-    return "\n".join(f"km {i}   {fmt_allure(1000 / s)} /km" for i, s in enumerate(splits, 1) if s > 0)
+def chrono(s):
+    """24:13, ou 1:04:13 au-delà d'une heure."""
+    s = int(s)
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60:02d}:{s % 60:02d}"
+
+
+class Decompte(FloatLayout):
+    """3, 2, 1 en plein écran : chaque seconde, un anneau sauge fait le tour du chiffre en partant du
+    point de départ, comme la boucle du logo. À la fin, l'écran s'efface en grandissant sur la carte."""
+    arc = NumericProperty(0)
+
+    def __init__(self, **kw):
+        super().__init__(opacity=0, **kw)
+        fond(self, FOND)
+        self.chiffre = lab("", 200, gras=True, chiffres=True, aligne="center", size_hint=(1, 1))
+        self.add_widget(self.chiffre)
+        echelle(self.chiffre)
+        with self.canvas.after:
+            Color(*FOND_2)
+            self._rail = Line(width=dp(7))
+            Color(*TRACE)
+            self._anneau = Line(width=dp(7), cap="round")
+            Color(*SUR_SIGNAL)
+            self._bord = Ellipse()
+            Color(*SIGNAL)
+            self._point = Ellipse()
+        self.bind(pos=self._dessiner, size=self._dessiner, arc=self._dessiner)
+
+    def _dessiner(self, *_):
+        cx, cy, r = self.center_x, self.center_y, min(self.width, self.height) * 0.36
+        self._rail.circle = (cx, cy, r)
+        self._anneau.circle = (cx, cy, r, 0, max(0.1, self.arc))
+        for e, rr in ((self._bord, dp(13)), (self._point, dp(10))):
+            e.pos, e.size = (cx - rr, cy + r - rr), (2 * rr, 2 * rr)
+
+    def montrer(self, texte):
+        Animation.cancel_all(self)
+        self.opacity, self.chiffre.text, self.arc = 1, texte, 0
+        echelle(self).xyz = (1, 1, 1)
+        sc = echelle(self.chiffre)
+        sc.xyz, self.chiffre.opacity = (1.35, 1.35, 1), 0
+        Animation(xyz=(1, 1, 1), d=0.35, t="out_back").start(sc)
+        Animation(opacity=1, d=0.2).start(self.chiffre)
+        Animation(arc=360, d=0.95, t="in_out_quad").start(self)
+
+    def effacer(self):
+        Animation(xyz=(1.12, 1.12, 1), d=0.35, t="in_quad").start(echelle(self))
+        Animation(opacity=0, d=0.35, t="in_quad").start(self)
+
+    def on_touch_down(self, t):  # rien ne passe à travers pendant le décompte
+        return self.opacity > 0 or super().on_touch_down(t)
 
 
 class EcranCourse(Screen):
@@ -35,46 +85,58 @@ class EcranCourse(Screen):
         super().__init__(name="course", **kw)
         self.app, self.course, self.prog, self.res = app, None, None, None
         self.dernier_evt, self.annonceur, self.sim, self.fini, self.voix_on = 0, None, None, False, True
-        self.boussole, self.az, self.btn_cap = None, None, None
+        self.boussole, self.az, self.btn_cap, self.en_pause = None, None, None, False
         self.voix = Voix(None if platform != "android" else self._activite())
 
         racine = FloatLayout()
-        col = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(6))
+        col = BoxLayout(orientation="vertical")
         self.trace = Trace(suivi=True)
         carte = avec_zoom(self.trace, self.changer_orient)
-        self.btn_voix = Button(text="Voix : oui", font_size="15sp", size_hint=(None, None),
-                               size=(dp(120), dp(48)), pos_hint={"right": 0.98, "top": 0.98},
-                               background_normal="", background_color=(0.12, 0.14, 0.16, 0.9),
-                               on_release=self.changer_voix)
+        self.btn_voix = Bouton("Voix", self.changer_voix, "carte", 48, 15, size_hint=(None, None),
+                               width=dp(96), pos_hint={"right": 0.97, "top": 0.97})
         carte.add_widget(self.btn_voix)
-        self.l_dist = lab("0.00", 72, MINT, True, size_hint_y=None, height=dp(88))
-        self.l_prevu = lab("", 16, GRIS, size_hint_y=None, height=dp(26))
-        self.l_temps = lab("00:00:00", 40, gras=True, size_hint_y=None, height=dp(54))
-        cases = BoxLayout(size_hint_y=None, height=dp(76), spacing=dp(8))
-        self.l_allure, self.l_vitesse, self.l_dplus = lab("--:--", 32, gras=True), lab("0.0", 32, gras=True), \
-            lab("0", 32, gras=True)
-        for val, unite in ((self.l_allure, "min/km"), (self.l_vitesse, "km/h"), (self.l_dplus, "m D+")):
+        self.bande = Bande()
+
+        # par ordre d'importance en courant : distance, puis temps et allure, puis le reste
+        panneau = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(372),
+                            padding=[dp(20), dp(2), dp(20), dp(18)], spacing=dp(6))
+        self.c_fond = fond(panneau, FOND)
+        haut = BoxLayout(size_hint_y=None, height=dp(112))
+        self.l_dist = lab("0,00", 104, gras=True, chiffres=True, size_hint_x=0.72)
+        self.l_etat = lab("", 18, gras=True, aligne="right", size_hint_x=0.28)
+        haut.add_widget(self.l_dist)
+        haut.add_widget(self.l_etat)
+        milieu = BoxLayout(size_hint_y=None, height=dp(84), spacing=dp(12))
+        self.l_temps, self.l_allure = lab("00:00", 54, gras=True, chiffres=True), \
+            lab("--:--", 54, gras=True, chiffres=True)
+        self.legendes = []
+        for val, legende in ((self.l_temps, "temps en mouvement"), (self.l_allure, "allure, min/km")):
             c = BoxLayout(orientation="vertical")
             c.add_widget(val)
-            c.add_widget(lab(unite, 15, GRIS, size_hint_y=None, height=dp(22)))
-            cases.add_widget(c)
-        boutons = BoxLayout(size_hint_y=None, height=dp(64), spacing=dp(8))
-        self.btn_pause = bouton("Pause", self.pause_reprise, ARDOISE, BLANC)
+            l = lab(legende, 14, BRUME, size_hint_y=None, height=dp(20))
+            self.legendes.append(l)
+            c.add_widget(l)
+            milieu.add_widget(c)
+        bas = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(12))
+        self.l_vitesse = lab("", 32, gras=True, chiffres=True)
+        self.l_dplus = lab("", 32, TRACE, gras=True, chiffres=True)
+        bas.add_widget(self.l_vitesse)
+        bas.add_widget(self.l_dplus)
+        boutons = BoxLayout(size_hint_y=None, height=dp(76), spacing=dp(10))
+        self.btn_pause = Bouton("Pause", self.pause_reprise, "encre", 76, 22)
+        self.btn_fin = Bouton("Terminer", self.terminer, "contour", 76, 20, size_hint_x=0.75)
         boutons.add_widget(self.btn_pause)
-        boutons.add_widget(bouton("Terminer", self.terminer, CORAIL, BLANC))
-        panneau = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(340), spacing=dp(2))
-        with panneau.canvas.before:  # fond plein : la carte ne peut pas passer sous les chiffres
-            Color(*FOND)
-            fond = Rectangle(pos=panneau.pos, size=panneau.size)
-        panneau.bind(pos=lambda w, v: setattr(fond, "pos", v), size=lambda w, v: setattr(fond, "size", v))
-        for w in (self.l_dist, self.l_prevu, self.l_temps, cases, boutons):
+        boutons.add_widget(self.btn_fin)
+        for w in (haut, milieu, bas, BoxLayout(), boutons):
             panneau.add_widget(w)
         col.add_widget(carte)
+        col.add_widget(self.bande)
         col.add_widget(panneau)
         racine.add_widget(col)
-        self.decompte = lab("", 160, MINT, True, size_hint=(1, 1), opacity=0)  # 3, 2, 1 par-dessus
+        self.decompte = Decompte(size_hint=(1, 1))
         racine.add_widget(self.decompte)
         self.add_widget(racine)
+        self.peindre(False)
 
     @staticmethod
     def _activite():
@@ -92,20 +154,20 @@ class EcranCourse(Screen):
         self.journal.poser("boucle", res)
         self.journal.poser("voix", self.voix_on)
         self.afficher_boucle(res)
-        self.app.sm.current = "course"
+        self.app.aller("course", "monter")
         self.voix.preparer()
         self.n = 3
-        self.decompte.opacity, self.decompte.text = 1, "3"
+        self.decompte.montrer("3")
         self.voix.dire("3")
         Clock.schedule_interval(self._decompter, 1)
 
     def _decompter(self, dt):
         self.n -= 1
         if self.n > 0:
-            self.decompte.text = str(self.n)
+            self.decompte.montrer(str(self.n))
             self.voix.dire(str(self.n))
             return True
-        self.decompte.opacity = 0
+        self.decompte.effacer()
         self.voix.dire("C'est parti")
         self.journal.ecrire("debut", time.time())
         self.lancer_enregistrement()
@@ -114,12 +176,14 @@ class EcranCourse(Screen):
 
     def afficher_boucle(self, res):
         self.res, self.fini = res, False
-        self.course, self.dernier_evt, self.cap = None, 0, Cap()
+        self.course, self.dernier_evt, self.cap, self.km_vu = None, 0, Cap(), 0
         self.prog = Progression(res["coords"])
         self.trace.coords = res["coords"]
         self.trace.fait, self.trace.boucle_faite, self.trace.moi = [], [], []
-        self.l_prevu.text, self.l_prevu.color = f"{self.prog.total / 1000:.1f} km prévus", GRIS
-        self.btn_pause.text = "Pause"
+        self.bande.part, self.bande.alerte = 0, False
+        self.bande.gauche.text, self.bande.droite.text = f"{nombre(self.prog.total / 1000)} km à parcourir", ""
+        self.l_dist.text, self.l_temps.text, self.l_allure.text = "0,00", "00:00", "--:--"
+        self.peindre(False)
         Window.allow_screensaver = False  # écran allumé pendant la course
 
     def lancer_enregistrement(self):
@@ -170,19 +234,38 @@ class EcranCourse(Screen):
 
     def maj_stats(self):
         c, v = self.course, self.course.vitesse()
-        self.l_dist.text = f"{c.dist / 1000:.2f}[size=26sp] km[/size]"
-        self.l_temps.text = fmt_temps(c.duree()) + ("  [size=20sp]EN PAUSE[/size]" if c.en_pause else "")
-        self.l_temps.color = GRIS if c.en_pause else BLANC
+        self.l_dist.text = f"{nombre(c.dist / 1000, 2)}{unite('km', 24)}"
+        if int(c.dist // 1000) > self.km_vu:  # un kilomètre de plus : la distance bat une fois
+            self.km_vu = int(c.dist // 1000)
+            pulser(self.l_dist, 1.1, 0.6)
+        self.l_temps.text = chrono(c.duree())
         self.l_allure.text = fmt_allure(v)
-        self.l_vitesse.text = f"{v * 3.6:.1f}"
-        self.l_dplus.text = f"{c.dplus:.0f}"
-        self.btn_pause.text = "Reprendre" if c.en_pause else "Pause"
-        p = self.prog
+        self.l_vitesse.text = f"{nombre(v * 3.6)}{unite('km/h', 15)}"
+        self.l_dplus.text = f"{c.dplus:.0f}{unite('m D+', 15)}"
+        if c.en_pause != self.en_pause:
+            self.peindre(c.en_pause)
+        p, b = self.prog, self.bande
+        b.alerte, b.part = p.hors_trace, p.pourcent / 100
         if p.hors_trace:
-            self.l_prevu.text, self.l_prevu.color = f"Hors du parcours (à {p.ecart:.0f} m)", CORAIL
+            b.gauche.text, b.droite.text = "Hors du parcours", f"à {p.ecart:.0f} m"
         else:
-            self.l_prevu.text = f"{p.restant / 1000:.1f} km restants · {p.pourcent:.0f} %"
-            self.l_prevu.color = GRIS
+            b.gauche.text, b.droite.text = f"{nombre(p.restant / 1000)} km restants", f"{p.pourcent:.0f} %"
+
+    def peindre(self, pause):
+        """En pause, le panneau passe en négatif (fondu) : on le voit du coin de l'œil."""
+        self.en_pause = pause
+        encre, papier = (FOND, ENCRE) if pause else (ENCRE, FOND)
+        Animation.cancel_all(self.c_fond)
+        Animation(rgba=papier, d=0.25, t="out_quad").start(self.c_fond)
+        for l, c in [(l, encre) for l in (self.l_dist, self.l_temps, self.l_allure, self.l_vitesse)] + \
+                [(l, (*encre[:3], 0.62)) for l in self.legendes] + [(self.l_dplus, encre if pause else TRACE)]:
+            Animation.cancel_all(l, "color")
+            Animation(color=c, d=0.25, t="out_quad").start(l)
+        self.l_etat.text, self.l_etat.color = ("En pause" if pause else ""), encre
+        if pause:
+            pulser(self.l_etat, 1.15)
+        self.btn_pause.text, self.btn_pause.style = ("Reprendre", "signal") if pause else ("Pause", "encre")
+        self.btn_fin.style = "fond" if pause else "contour"
 
     def pause_reprise(self, *_):
         if not self.course or self.fini:
@@ -193,7 +276,7 @@ class EcranCourse(Screen):
     def changer_voix(self, *_):
         self.voix_on = not self.voix_on
         self.journal.poser("voix", self.voix_on)  # lu par le service
-        self.btn_voix.text = "Voix : oui" if self.voix_on else "Voix : non"
+        self.btn_voix.text = "Voix" if self.voix_on else "Muet"
 
     # --- fin ---
     def terminer(self, *_):
@@ -208,26 +291,26 @@ class EcranCourse(Screen):
     def popup_fin(self):
         c = self.course
         moy = fmt_allure(c.dist / c.duree()) if c.duree() else "--:--"
-        boite = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
-        boite.add_widget(lab(f"{c.dist / 1000:.2f} km en {fmt_temps(c.duree())}\n"
-                             f"allure moyenne {moy} min/km   D+ {c.dplus:.0f} m", 22,
-                             size_hint_y=None, height=dp(80)))
+        f = Feuille("Course terminée", Window.height * 0.82)
+        f.ajouter(lab(f"{nombre(c.dist / 1000, 2)}{unite('km', 26)}", 84, gras=True, chiffres=True,
+                      size_hint_y=None, height=dp(92)))
+        f.ajouter(lab(f"en {chrono(c.duree())}, {moy} min/km en moyenne, {c.dplus:.0f} m de D+", 17, BRUME,
+                      size_hint_y=None, height=dp(26)))
+        f.ajouter(lab("Tes kilomètres", 16, gras=True, size_hint_y=None, height=dp(30)))
         sv = ScrollView()
-        splits = lab(texte_splits(c.splits) or "Pas encore de kilomètre complet", 18, GRIS, size_hint_y=None)
-        splits.bind(texture_size=lambda l, s: setattr(l, "height", s[1]))
+        splits = Splits()
+        splits.remplir(c.splits)
         sv.add_widget(splits)
-        boite.add_widget(sv)
-        ligne = BoxLayout(size_hint_y=None, height=dp(64), spacing=dp(8))
-        pop = Popup(title="Course terminée", content=boite, size_hint=(0.92, 0.7),
-                    auto_dismiss=False, title_size="20sp")
-        ligne.add_widget(bouton("Enregistrer", lambda *_: self.fin_course(pop, True)))
-        ligne.add_widget(bouton("Supprimer", lambda b: confirmer(b, "Sûr ?", lambda: self.fin_course(pop, False)),
-                                ARDOISE, BLANC))
-        boite.add_widget(ligne)
-        pop.open()
+        f.ajouter(sv)
+        ligne = BoxLayout(size_hint_y=None, height=dp(72), spacing=dp(10))
+        ligne.add_widget(Bouton("Enregistrer", lambda *_: self.fin_course(f, True), "signal", 72, 21))
+        ligne.add_widget(Bouton("Supprimer", lambda b: confirmer(b, "Supprimer ?", lambda: self.fin_course(f, False)),
+                                "contour", 72, 18, size_hint_x=0.7))
+        f.ajouter(ligne)
+        f.ouvrir()
 
     def fin_course(self, pop, garder):
-        pop.dismiss()
+        pop.fermer()
         if garder and self.course.dist > 0:
             self.app.stockage.enregistrer(self.course.resume())
         self.journal.vider()
@@ -240,7 +323,7 @@ class EcranCourse(Screen):
         if self.btn_cap:
             self.btn_cap.text = ORIENTS["marche"]
         Window.allow_screensaver = True
-        self.app.sm.current = "plan"
+        self.app.aller("plan", "descendre")
 
     # --- après un crash : une course du journal n'est pas terminée ---
     def verifier_reprise(self):
@@ -248,27 +331,27 @@ class EcranCourse(Screen):
         if etat is None or not res:
             return
         self.voix_on = self.journal.lire_meta("voix") is not False
-        self.btn_voix.text = "Voix : oui" if self.voix_on else "Voix : non"
+        self.btn_voix.text = "Voix" if self.voix_on else "Muet"
         self.afficher_boucle(res)
         if etat == "fin":  # terminée mais pas encore enregistrée
-            self.app.sm.current = "course"
+            self.app.aller("course", "monter")
             self.lire_journal(0)
             self.fini = True
             self.popup_fin()
             return
 
         def reprendre():
-            self.app.sm.current = "course"
+            self.app.aller("course", "monter")
             self.lancer_enregistrement()
             self.suivre()
 
         def finir():
-            self.app.sm.current = "course"
+            self.app.aller("course", "monter")
             self.lire_journal(0)
             self.terminer()
 
-        choix("Course en cours", "Une course n'est pas terminée.\nLa reprendre ?",
-              [("Reprendre", reprendre, MINT, (0.05, 0.10, 0.08, 1)), ("Terminer", finir, ARDOISE, BLANC)])
+        choix("Course en cours", "Ta dernière course n'est pas terminée. Tu la reprends ?",
+              [("Reprendre", reprendre, "signal"), ("Terminer", finir, "contour")])
 
     # --- orientation de la carte ---
     def changer_orient(self, btn):
@@ -284,7 +367,7 @@ class EcranCourse(Screen):
             if self.boussole.activer(True):
                 Clock.schedule_interval(self.maj_boussole, 0.1)
             else:
-                self.l_prevu.text = self.boussole.erreur
+                self.bande.gauche.text = self.boussole.erreur
                 mode = "nord"
         elif self.boussole:
             self.boussole.activer(False)

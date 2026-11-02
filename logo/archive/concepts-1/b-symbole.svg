@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img"><title>Loop R</title>
+<g transform="translate(17 -9)">
+<g transform="translate(16 0) skewX(-10)">
+  <path d="M70 180V46H134C166 46 186 68 186 98C186 128 166 148 134 148H70M126 148L201.3 212H102" fill="none" stroke="#000" stroke-width="30" stroke-linejoin="round"/>
+</g>
+<circle cx="48.62" cy="212" r="16" fill="#000"/>
+</g>
+</svg>

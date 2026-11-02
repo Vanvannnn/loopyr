@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="titre">
+  <title id="titre">Loopr</title>
+  <style>
+    .boucle { fill: none; stroke: var(--loopr-boucle, #2443E6); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
+    .depart { fill: var(--loopr-signal, #C8F031); stroke: var(--loopr-anneau, #0D1726); stroke-width: 1.6; }
+    @media (prefers-color-scheme: dark) {
+      .boucle { stroke: var(--loopr-boucle, #5B78FF); }
+    }
+  </style>
+  <!-- une boucle penchée vers l'avant : elle part du point, fait le tour et revient au point -->
+  <path class="boucle" d="M10 38C10 26 17 9 30 8C40 7.4 43.5 16.5 38 23.5C32 31 21 35 16.2 36.3"/>
+  <circle class="depart" cx="10" cy="38" r="4.6"/>
+</svg>
