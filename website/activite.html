@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activité</title>
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+<style>
+  .titre-page { padding: 40px 0 24px; }
+  .titre-page h1 { font-size: clamp(2.6rem, 7vw, 4.4rem); margin-bottom: 12px; }
+  .mosaique { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 32px 24px; }
+  .tuile .apercu { aspect-ratio: 4 / 3; background: var(--fond-2); border-radius: var(--r); }
+  .tuile .apercu svg { width: 100%; height: 100%; padding: 12%; }
+  .tuile h3 { font-size: 1.35rem; margin: 12px 0 4px; }
+  .tuile .chiffres { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: .95rem; }
+  .section-titre { font-size: 2rem; margin: 40px 0 18px; }
+  .avatar { width: 84px; height: 84px; border-radius: 50%; background: var(--sauge); object-fit: cover; display: grid; place-items: center;
+    font: 800 2.4rem/1 var(--chiffres); color: #22322B; flex-shrink: 0; }
+  .personne { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .personne .avatar { width: 44px; height: 44px; font-size: 1.3rem; }
+</style>
+</head>
+<body>
+<header class="entete">
+  <div class="conteneur">
+    <a class="marque" href="/" aria-label="Loopy, accueil">
+      <img class="clair" src="/assets/img/loopy-horizontal-couleur-clair.svg" alt="Loopy" width="69" height="34">
+      <img class="sombre" src="/assets/img/loopy-horizontal-sombre.svg" alt="Loopy" width="69" height="34">
+    </a>
+    <nav class="nav" aria-label="Principale">
+      <a href="/creer.html">Créer une boucle</a>
+      <a class="large" href="/communaute.html">Communauté</a>
+      <a href="/connexion.html" data-compte>Se connecter</a>
+    </nav>
+  </div>
+</header>
+<main class="conteneur" id="vue"><p class="doux" style="padding:40px 0">Chargement…</p></main>
+<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+import { api, moi, SPORTS, km, duree, rythme, date, echapper, toast } from "/assets/js/commun.js";
+import { carte, boucle, cadrer } from "/assets/js/carte.js";
+const id = new URLSearchParams(location.search).get("id") || "", vue = document.getElementById("vue");
+async function charger() {
+  const [a, u, coms] = await Promise.all([api(`/api/activites/${encodeURIComponent(id)}`), moi(), api(`/api/activites/${encodeURIComponent(id)}/commentaires`)]);
+  document.title = a.nom;
+  vue.innerHTML = `<div class="titre-page"><h1>${echapper(a.nom)}</h1>
+      <p class="doux"><a href="/u.html?nom=${encodeURIComponent(a.auteur)}">${echapper(a.auteur)}</a>, ${SPORTS[a.sport].nom.toLowerCase()}, ${date(a.debut)}</p></div>
+    <div class="rangee" style="gap:36px;margin-bottom:24px">
+      <div class="stat"><span class="chiffre">${km(a.distance, 2)} km</span><span class="doux">distance parcourue</span></div>
+      <div class="stat"><span class="chiffre">${duree(a.duree)}</span><span class="doux">en mouvement</span></div>
+      <div class="stat"><span class="chiffre">${rythme(a)}</span><span class="doux">${a.sport === "velo" ? "vitesse moyenne" : "allure moyenne"}</span></div>
+      ${a.denivele != null ? `<div class="stat"><span class="chiffre">${Math.round(a.denivele)} m</span><span class="doux">de D+</span></div>` : ""}</div>
+    <div class="carte" id="carte" style="height:min(60vh,520px)"></div>
+    ${a.trace.length < 2 ? `<p class="aide">Tracé trop court pour être montré sans révéler le départ.</p>` : ""}
+    <div class="rangee" style="margin:24px 0">
+      ${u ? `<button class="bouton${a.aime ? "" : " second"}" type="button" id="jaime" aria-pressed="${a.aime}">${a.aime ? "Tu aimes" : "J'aime"} (${a.jaimes})</button>` : `<span class="doux">${a.jaimes} j'aime</span>`}
+    </div>
+    <h2 class="section-titre">Commentaires</h2>
+    <div id="coms">${coms.map((c) => `<p style="margin-bottom:12px"><strong>${echapper(c.auteur)}</strong> ${echapper(c.texte)}</p>`).join("") || `<p class="doux">Aucun commentaire.</p>`}</div>
+    ${u ? `<form id="f" style="max-width:560px;margin-top:16px"><label for="t">Ton commentaire</label><textarea id="t" maxlength="1000" required></textarea>
+      <button class="bouton" type="submit" style="margin-top:12px">Publier le commentaire</button></form>` : `<p><a href="/connexion.html?suite=${encodeURIComponent(location.pathname + location.search)}">Connecte-toi</a> pour commenter.</p>`}`;
+  const m = carte("carte", undefined, undefined, true);
+  if (a.trace.length > 1) { boucle(m, a.trace); cadrer(m, a.trace); }
+  document.getElementById("jaime")?.addEventListener("click", async () => {
+    try { await api(`/api/activites/${a.id}/jaime`, { methode: a.aime ? "DELETE" : "POST" }); charger(); } catch (e) { toast(e.message); }
+  });
+  document.getElementById("f")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try { await api(`/api/activites/${a.id}/commentaires`, { methode: "POST", corps: { texte: document.getElementById("t").value } }); charger(); }
+    catch (err) { toast(err.message); }
+  });
+}
+charger().catch((e) => { vue.innerHTML = `<p class="message erreur" style="margin-top:40px">${echapper(e.message)}</p>`; });
+</script>
+</body>
+</html>

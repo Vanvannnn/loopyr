@@ -2,7 +2,8 @@
 Toutes les écritures sont atomiques : un crash ne peut pas abîmer l'historique. Python pur."""
 import json, os, time
 
-RESUME = ("id", "date", "debut", "distance", "duree", "denivele", "strava_id")
+RESUME = ("id", "date", "debut", "distance", "duree", "denivele", "strava_id", "sport", "nom", "id_serveur")
+RESUME_ITINERAIRE = ("id", "nom", "sport", "distance", "montee", "cree", "favori", "id_serveur")
 
 
 def ecrire_json(chemin, donnees):
@@ -28,8 +29,11 @@ def mettre_de_cote(chemin):
 
 
 class Stockage:
-    def __init__(self, dossier, ancien_profil=None):
-        self.dossier = dossier
+    """champs : ce que l'index garde de chaque élément ; tri : le champ qui classe (le plus récent d'abord).
+    Sert aux activités (réellement faites) et, dans un autre dossier, aux itinéraires enregistrés."""
+
+    def __init__(self, dossier, ancien_profil=None, champs=RESUME, tri="debut"):
+        self.dossier, self.champs, self.tri = dossier, champs, tri
         os.makedirs(dossier, exist_ok=True)
         self.chemin_index = os.path.join(dossier, "index.json")
         if ancien_profil and os.path.exists(ancien_profil):
@@ -70,8 +74,8 @@ class Stockage:
                 except ValueError:
                     mettre_de_cote(os.path.join(self.dossier, nom))
                     continue
-                idx.append({k: act.get(k) for k in RESUME})
-        idx.sort(key=lambda a: a["debut"], reverse=True)
+                idx.append({k: act.get(k) for k in self.champs})
+        idx.sort(key=lambda a: a.get(self.tri) or 0, reverse=True)
         ecrire_json(self.chemin_index, idx)
         return idx
 
@@ -85,8 +89,8 @@ class Stockage:
     def enregistrer(self, act):
         ecrire_json(self._chemin(act["id"]), act)
         idx = [a for a in self.index() if a["id"] != act["id"]]
-        idx.append({k: act.get(k) for k in RESUME})
-        idx.sort(key=lambda a: a["debut"], reverse=True)
+        idx.append({k: act.get(k) for k in self.champs})
+        idx.sort(key=lambda a: a.get(self.tri) or 0, reverse=True)
         ecrire_json(self.chemin_index, idx)
 
     def supprimer(self, id_):

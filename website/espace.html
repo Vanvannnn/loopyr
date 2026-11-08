@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mon espace</title>
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+<style>
+  .tete { padding: 40px 0 8px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+  .avatar { width: 84px; height: 84px; border-radius: 50%; background: var(--sauge); object-fit: cover; flex-shrink: 0;
+    display: grid; place-items: center; font: 800 2.4rem/1 var(--chiffres); color: #22322B; }
+  .tete h1 { font-size: clamp(2.6rem, 7vw, 4rem); }
+  .onglets { display: flex; gap: 4px; border-bottom: 1px solid var(--fond-3); margin: 24px 0 32px; overflow-x: auto; }
+  .onglets a { padding: 12px 14px; text-decoration: none; font-weight: 700; white-space: nowrap; color: var(--brume); }
+  .onglets a[aria-current="page"] { color: var(--encre); box-shadow: inset 0 -3px 0 var(--trace); }
+  .liste { display: grid; gap: 0; }
+  .ligne { display: grid; grid-template-columns: 120px 1fr auto; gap: 20px; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--fond-3); }
+  .ligne .apercu { width: 120px; height: 90px; border-radius: var(--r-petit); background: var(--fond-2); }
+  .ligne .apercu svg { width: 100%; height: 100%; padding: 10px; }
+  .ligne h3 { font-size: 1.35rem; margin-bottom: 4px; }
+  .ligne .chiffres { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: .98rem; }
+  .ligne .actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; max-width: 340px; }
+  .ligne select { min-height: 40px; width: auto; padding: 6px 10px; }
+  @media (max-width: 760px) {
+    .ligne { grid-template-columns: 84px 1fr; }
+    .ligne .apercu { width: 84px; height: 70px; }
+    .ligne .actions { grid-column: 1 / -1; justify-content: flex-start; max-width: none; }
+  }
+  .grille-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 28px; margin-bottom: 40px; }
+  .semaines { display: flex; align-items: flex-end; gap: 6px; height: 160px; border-bottom: 2px solid var(--route); }
+  .semaines div { flex: 1; background: var(--encre); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }
+  .semaines div:last-child { background: var(--trace); }
+  .profil-form { max-width: 560px; }
+  .profil-form fieldset { border: 0; padding: 0; margin: 0 0 28px; }
+  .profil-form legend { font: 600 1.6rem/1 var(--chiffres); margin-bottom: 14px; }
+  .personnes { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .personne { display: flex; align-items: center; gap: 12px; }
+  .personne .avatar { width: 44px; height: 44px; font-size: 1.3rem; }
+</style>
+</head>
+<body>
+<header class="entete">
+  <div class="conteneur">
+    <a class="marque" href="/" aria-label="Loopy, accueil">
+      <img class="clair" src="/assets/img/loopy-horizontal-couleur-clair.svg" alt="Loopy" width="69" height="34">
+      <img class="sombre" src="/assets/img/loopy-horizontal-sombre.svg" alt="Loopy" width="69" height="34">
+    </a>
+    <nav class="nav" aria-label="Principale">
+      <a href="/creer.html">Créer une boucle</a>
+      <a class="large" href="/communaute.html">Communauté</a>
+      <a href="/espace.html" data-compte aria-current="page">Mon espace</a>
+    </nav>
+  </div>
+</header>
+<main class="conteneur">
+  <div class="tete" id="tete"></div>
+  <nav class="onglets" aria-label="Mon espace">
+    <a href="#activites">Activités</a><a href="#parcours">Parcours</a><a href="#stats">Statistiques</a>
+    <a href="#fil">Fil</a><a href="#abonnements">Abonnements</a><a href="#profil">Profil</a>
+  </nav>
+  <div id="vue" aria-live="polite"></div>
+</main>
+<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p>
+  <button class="bouton discret petit" id="deconnexion" type="button">Se déconnecter</button></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+import { api, exigerConnexion, SPORTS, ICONES, km, duree, rythme, date, echapper, barre, VOIES, gpxItineraire, nomItineraire, telecharger, toast } from "/assets/js/commun.js";
+const $ = (s) => document.querySelector(s), vue = $("#vue");
+let u = await exigerConnexion();
+if (!u) throw new Error("non connecté");
+
+function apercu(coords) {
+  if (!coords || coords.length < 2) return "";
+  const k = Math.cos(coords[0][0] * Math.PI / 180), pts = coords.map(([a, b]) => [b * k, -a]);
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), x0 = Math.min(...xs), y0 = Math.min(...ys);
+  const t = Math.max(Math.max(...xs) - x0, Math.max(...ys) - y0) || 1;
+  const dx = (t - (Math.max(...xs) - x0)) / 2, dy = (t - (Math.max(...ys) - y0)) / 2;
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><path fill="none" stroke="var(--trace)" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"
+    d="M${pts.map(([x, y]) => `${((x - x0 + dx) / t * 100).toFixed(1)} ${((y - y0 + dy) / t * 100).toFixed(1)}`).join("L")}"/></svg>`;
+}
+const initiale = (n) => echapper(n[0].toUpperCase());
+const avatar = (x) => x.avatar ? `<img class="avatar" src="${x.avatar}" alt="">` : `<span class="avatar" aria-hidden="true">${initiale(x.nom)}</span>`;
+const VIS = { public: "Tout le monde", abonnes: "Mes abonnés", prive: "Moi seul" };
+
+function tete() {
+  $("#tete").innerHTML = `${avatar(u)}<div><h1>${echapper(u.nom)}</h1><p class="doux">${echapper(u.bio || "Ajoute une présentation dans l'onglet Profil.")}</p></div>`;
+}
+
+// --- activités (réellement faites, envoyées par l'app) ---
+async function activites() {
+  const acts = await api("/api/moi/activites");
+  if (!acts.length) {
+    vue.innerHTML = `<p class="vide">Pas encore d'activité. Les activités sont enregistrées par le GPS de l'app Loopy pendant ta sortie, puis envoyées ici quand tu es connecté dans l'app. Une boucle générée n'est pas une activité.</p>
+      <a class="bouton" href="/creer.html">Créer une boucle</a>`;
+    return;
+  }
+  vue.innerHTML = `<div class="liste">${acts.map((a) => `
+    <article class="ligne" data-id="${a.id}">
+      <div class="apercu">${apercu(a.trace)}</div>
+      <div><h3><a href="/activite.html?id=${a.id}">${echapper(a.nom)}</a></h3>
+        <div class="chiffres"><span>${ICONES[a.sport].replace('width="24" height="24"', 'width="18" height="18" style="display:inline;vertical-align:-3px"')} ${SPORTS[a.sport].nom}</span>
+          <span>${date(a.debut)}</span><strong>${km(a.distance, 2)} km</strong><span>${duree(a.duree)}</span><span>${rythme(a)}</span>
+          <span>${a.denivele != null ? Math.round(a.denivele) + " m D+" : ""}</span><span class="doux">${a.jaimes} j'aime, ${a.commentaires} commentaire${a.commentaires > 1 ? "s" : ""}</span></div>
+        <p class="petit doux" data-strava>${statutStrava(a.strava)}</p></div>
+      <div class="actions">
+        <label class="cache" for="v-${a.id}">Qui voit cette activité</label>
+        <select id="v-${a.id}" data-vis>${Object.entries(VIS).map(([k, n]) => `<option value="${k}" ${k === a.visibilite ? "selected" : ""}>${n}</option>`).join("")}</select>
+        <a class="bouton second petit" href="/api/activites/${a.id}/gpx">GPX de l'activité</a>
+        ${u.strava.configure && u.strava.connecte && !a.strava?.activite ? `<button class="bouton petit" type="button" data-strava-envoi>Envoyer vers Strava</button>` : ""}
+      </div>
+    </article>`).join("")}</div>
+    ${u.strava.configure && !u.strava.connecte ? `<p class="message" style="margin-top:24px">Relie ton compte Strava dans l'onglet <a href="#profil">Profil</a> pour y envoyer tes activités.</p>` : ""}`;
+  vue.querySelectorAll("[data-vis]").forEach((s) => s.addEventListener("change", async () => {
+    const id = s.closest("[data-id]").dataset.id;
+    try { await api(`/api/activites/${id}`, { methode: "PATCH", corps: { visibilite: s.value } }); toast(`Visible par : ${VIS[s.value].toLowerCase()}`); }
+    catch (e) { toast(e.message); }
+  }));
+  vue.querySelectorAll("[data-strava-envoi]").forEach((b) => b.addEventListener("click", () => envoyerStrava(b)));
+}
+function statutStrava(s) {
+  if (!s || !s.statut) return "";
+  if (s.statut === "pret") return `Sur Strava : <a href="https://www.strava.com/activities/${s.activite}">voir l'activité</a>`;
+  if (s.statut === "erreur") return `Strava a refusé l'envoi : ${echapper(s.erreur)}`;
+  return "Strava traite l'activité…";
+}
+async function envoyerStrava(b) {
+  const ligne = b.closest("[data-id]"), id = ligne.dataset.id, p = ligne.querySelector("[data-strava]");
+  b.disabled = true; p.textContent = "Envoi à Strava…";
+  try {
+    let s = await api(`/api/activites/${id}/strava`, { methode: "POST" });
+    for (let i = 0; s.statut === "en_cours" && i < 30; i++) {  // traitement asynchrone : au plus une requête par seconde
+      p.textContent = "Strava traite l'activité…";
+      await new Promise((r) => setTimeout(r, 2000));
+      s = await api(`/api/activites/${id}/strava`);
+    }
+    p.innerHTML = statutStrava(s);
+    if (s.statut === "pret") b.remove(); else b.disabled = false;
+  } catch (e) { p.textContent = e.message; b.disabled = false; }
+}
+
+// --- parcours (boucles enregistrées) ---
+async function parcours(favoris = false) {
+  const its = await api(`/api/itineraires${favoris ? "?favoris=true" : ""}`);
+  vue.innerHTML = `<div class="rangee" style="margin-bottom:16px"><div class="segmente" role="group" aria-label="Filtrer">
+      <button type="button" data-f="0" aria-pressed="${!favoris}">Toutes</button><button type="button" data-f="1" aria-pressed="${favoris}">Favorites</button></div>
+      <a class="bouton second petit" href="/creer.html">Créer une boucle</a></div>
+    ${its.length ? `<div class="liste">${its.map((i) => `
+    <article class="ligne" data-id="${i.id}">
+      <div class="apercu">${apercu(i.trace)}</div>
+      <div><h3>${echapper(i.nom)}</h3><div class="chiffres"><span>${SPORTS[i.sport].nom}</span><strong>${km(i.distance)} km</strong>
+        <span>${i.montee != null ? Math.round(i.montee) + " m D+" : ""}</span><span class="doux">enregistrée le ${date(i.cree)}</span></div>
+        ${i.resume_voies ? `<div style="max-width:420px;margin-top:8px">${barre(i.resume_voies.voies, VOIES)}</div>` : ""}</div>
+      <div class="actions">
+        <button class="bouton second petit" type="button" data-act="favori" aria-pressed="${i.favori}">${i.favori ? "Retirer des favoris" : "Ajouter aux favoris"}</button>
+        <button class="bouton second petit" type="button" data-act="partage">${i.partage ? "Ne plus partager" : "Partager à la communauté"}</button>
+        <a class="bouton second petit" href="/api/itineraires/${i.id}/gpx">GPX de l'itinéraire</a>
+        <button class="bouton danger petit" type="button" data-act="suppr">Supprimer</button>
+      </div></article>`).join("")}</div>` : `<p class="vide">${favoris ? "Aucune boucle favorite." : "Aucune boucle enregistrée. Génère-en une, puis touche « Enregistrer »."}</p>`}`;
+  vue.querySelectorAll("[data-f]").forEach((b) => b.addEventListener("click", () => parcours(b.dataset.f === "1")));
+  vue.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", async () => {
+    const id = b.closest("[data-id]").dataset.id, i = its.find((x) => x.id === id);
+    try {
+      if (b.dataset.act === "suppr") {
+        if (b.dataset.arme !== "1") { b.dataset.arme = "1"; b.textContent = "Confirmer la suppression"; return; }
+        await api(`/api/itineraires/${id}`, { methode: "DELETE" });
+      } else await api(`/api/itineraires/${id}`, { methode: "PATCH", corps: { [b.dataset.act]: !i[b.dataset.act] } });
+      parcours(favoris);
+    } catch (e) { toast(e.message); }
+  }));
+}
+
+// --- statistiques ---
+async function stats() {
+  u = await api("/api/moi");
+  const s = u.stats, ps = s.par_sport, max = Math.max(...s.km_par_semaine, 1);
+  const bloc = (sport) => {
+    const x = ps[sport];
+    if (!x) return `<div class="stat"><span class="chiffre">0</span><span class="doux">${SPORTS[sport].nom} : aucune sortie</span></div>`;
+    return `<div class="stat"><span class="chiffre">${km(x.distance, 0)} km</span><span class="doux">${SPORTS[sport].nom} : ${x.nombre} sortie${x.nombre > 1 ? "s" : ""}, ${duree(x.duree)}, ${Math.round(x.denivele)} m D+</span></div>`;
+  };
+  vue.innerHTML = `<div class="grille-stats">${bloc("course")}${bloc("velo")}
+      <div class="stat"><span class="chiffre">${s.itineraires}</span><span class="doux">boucles enregistrées</span></div></div>
+    <h2 style="font-size:2rem;margin-bottom:16px">Kilomètres par semaine</h2>
+    <div class="semaines" role="img" aria-label="Kilomètres des 12 dernières semaines : ${s.km_par_semaine.join(", ")}">
+      ${s.km_par_semaine.map((k) => `<div style="height:${k / max * 100}%" title="${String(k).replace(".", ",")} km"></div>`).join("")}</div>
+    <p class="aide">Les 12 dernières semaines, la semaine en cours à droite.</p>`;
+}
+
+// --- fil : les activités des personnes suivies ---
+async function fil() {
+  const acts = await api("/api/fil");
+  vue.innerHTML = acts.length ? `<div class="liste">${acts.map((a) => `
+    <article class="ligne"><div class="apercu">${apercu(a.trace)}</div>
+      <div><h3><a href="/activite.html?id=${a.id}">${echapper(a.nom)}</a></h3>
+        <div class="chiffres"><a href="/u.html?nom=${encodeURIComponent(a.auteur)}">${echapper(a.auteur)}</a><span>${date(a.debut)}</span>
+          <strong>${km(a.distance, 2)} km</strong><span>${duree(a.duree)}</span><span>${rythme(a)}</span></div></div>
+      <div class="actions"><button class="bouton second petit" type="button" data-jaime="${a.id}" aria-pressed="${a.aime}">${a.aime ? "Je n'aime plus" : "J'aime"} (${a.jaimes})</button>
+        <a class="bouton discret petit" href="/activite.html?id=${a.id}">Commenter (${a.commentaires})</a></div></article>`).join("")}</div>`
+    : `<p class="vide">Ton fil est vide. Suis des sportifs depuis la <a href="/communaute.html">communauté</a> pour voir leurs sorties ici.</p>`;
+  vue.querySelectorAll("[data-jaime]").forEach((b) => b.addEventListener("click", async () => {
+    try { await api(`/api/activites/${b.dataset.jaime}/jaime`, { methode: b.getAttribute("aria-pressed") === "true" ? "DELETE" : "POST" }); fil(); }
+    catch (e) { toast(e.message); }
+  }));
+}
+
+// --- abonnements ---
+async function abonnements() {
+  const r = await api("/api/moi/abonnements");
+  const liste = (xs, vide) => xs.length ? `<div class="personnes">${xs.map((x) => `<a class="personne" href="/u.html?nom=${encodeURIComponent(x.nom)}">${avatar(x)}<strong>${echapper(x.nom)}</strong></a>`).join("")}</div>` : `<p class="vide">${vide}</p>`;
+  vue.innerHTML = `<h2 style="font-size:2rem;margin-bottom:16px">Je suis</h2>${liste(r.abonnements, "Tu ne suis personne pour l'instant.")}
+    <h2 style="font-size:2rem;margin:32px 0 16px">Me suivent</h2>${liste(r.abonnes, "Personne ne te suit encore.")}
+    <p style="margin-top:24px"><a class="bouton second" href="/communaute.html">Trouver des sportifs</a></p>`;
+}
+
+// --- profil et confidentialité ---
+async function profil() {
+  u = await api("/api/moi");
+  const retour = new URLSearchParams(location.search).get("strava");
+  const msgStrava = { ok: "Compte Strava relié.", refus: "Tu as refusé l'accès à Strava.", permission: "Strava n'a pas donné la permission d'envoyer des activités : coche-la lors de l'autorisation.", erreur: "Strava n'a pas répondu : réessaie." }[retour];
+  const pref = u.preferences || {};
+  vue.innerHTML = `<form class="profil-form" id="f">
+    <fieldset><legend>Toi</legend>
+      <div class="champ"><label for="avatar">Photo de profil</label><input id="avatar" type="file" accept="image/png,image/jpeg,image/webp"><p class="aide">PNG, JPEG ou WebP, 2 Mo au plus.</p></div>
+      <div class="champ"><label for="bio">Présentation</label><textarea id="bio" maxlength="500">${echapper(u.bio)}</textarea></div>
+      <div class="champ"><label for="sport">Sport favori</label><select id="sport">${Object.entries(SPORTS).map(([k, s]) => `<option value="${k}" ${k === u.sport ? "selected" : ""}>${s.nom}</option>`).join("")}</select></div>
+    </fieldset>
+    <fieldset><legend>Préférences de parcours</legend>
+      <div class="champ"><label for="relief">Relief préféré</label><select id="relief">
+        ${[["", "Peu importe"], ["plat", "Plutôt plat"], ["vallonne", "Vallonné"]].map(([k, n]) => `<option value="${k}" ${k === (pref.relief || "") ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+      <div class="champ"><label for="dcourse">Distance habituelle en course (km)</label><input id="dcourse" type="number" min="1" max="100" step="0.5" value="${pref.distance_course || ""}"></div>
+      <div class="champ"><label for="dvelo">Distance habituelle à vélo (km)</label><input id="dvelo" type="number" min="3" max="300" step="1" value="${pref.distance_velo || ""}"></div>
+    </fieldset>
+    <fieldset><legend>Confidentialité</legend>
+      <div class="champ"><label for="vp">Qui voit mon profil</label><select id="vp">${Object.entries(VIS).map(([k, n]) => `<option value="${k}" ${k === u.visibilite_profil ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+      <div class="champ"><label for="va">Qui voit mes nouvelles activités</label><select id="va">${Object.entries(VIS).map(([k, n]) => `<option value="${k}" ${k === u.visibilite_activites ? "selected" : ""}>${n}</option>`).join("")}</select>
+        <p class="aide">Tu peux changer chaque activité ensuite.</p></div>
+      <label class="case"><input type="checkbox" id="md" ${u.masquer_depart ? "checked" : ""}> Masquer aux autres les 300 premiers et derniers mètres de mes tracés</label>
+    </fieldset>
+    <div class="rangee"><button class="bouton" type="submit">Enregistrer le profil</button></div>
+  </form>
+  <section class="profil-form" style="margin-top:48px"><h2 style="font-size:2rem;margin-bottom:12px">Strava</h2>
+    ${msgStrava ? `<p class="message${retour === "ok" ? "" : " erreur"}" style="margin-bottom:14px">${msgStrava}</p>` : ""}
+    ${!u.strava.configure ? `<p class="doux">L'envoi vers Strava n'est pas encore activé sur ce serveur Loopy.</p>`
+      : u.strava.connecte ? `<p>Relié au compte Strava de <strong>${echapper(u.strava.athlete || "")}</strong>. Tes activités terminées peuvent y être envoyées depuis l'onglet Activités.</p>
+        <button class="bouton second" type="button" id="strava-off" style="margin-top:12px">Délier Strava</button>`
+      : `<p>Relie ton compte pour envoyer tes activités terminées sur Strava. Loopy demande seulement le droit de créer des activités et de lire celles qu'il envoie.</p>
+        <button class="bouton" type="button" id="strava-on" style="margin-top:12px">Relier mon compte Strava</button>`}
+  </section>
+  <section class="profil-form" style="margin-top:48px"><h2 style="font-size:2rem;margin-bottom:12px">Supprimer mon compte</h2>
+    <p class="doux">Ton profil, tes boucles, tes activités, tes j'aime et tes commentaires seront effacés. C'est définitif.</p>
+    <button class="bouton danger" type="button" id="suppr" style="margin-top:12px">Supprimer mon compte</button></section>`;
+  $("#f").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const f = $("#avatar").files[0];
+      if (f) { const fd = new FormData(); fd.append("fichier", f); await api("/api/moi/avatar", { methode: "POST", fichier: fd }); }
+      const p = { ...pref, relief: $("#relief").value || null, distance_course: parseFloat($("#dcourse").value) || null, distance_velo: parseFloat($("#dvelo").value) || null };
+      u = { ...u, ...(await api("/api/moi", { methode: "PATCH", corps: { bio: $("#bio").value, sport: $("#sport").value, preferences: p,
+        visibilite_profil: $("#vp").value, visibilite_activites: $("#va").value, masquer_depart: $("#md").checked } })) };
+      tete(); toast("Profil enregistré");
+    } catch (err) { toast(err.message); }
+  });
+  $("#strava-on")?.addEventListener("click", async () => {
+    try { location.href = (await api("/api/strava/connexion?retour=" + encodeURIComponent("/espace.html#profil"), { methode: "POST" })).url; }
+    catch (e) { toast(e.message); }
+  });
+  $("#strava-off")?.addEventListener("click", async () => { await api("/api/strava", { methode: "DELETE" }); profil(); });
+  $("#suppr").addEventListener("click", async (e) => {
+    if (e.target.dataset.arme !== "1") { e.target.dataset.arme = "1"; e.target.textContent = "Confirmer : tout supprimer"; return; }
+    await api("/api/moi", { methode: "DELETE" }); location.replace("/");
+  });
+}
+
+const VUES = { activites, parcours, stats, fil, abonnements, profil };
+async function router() {
+  const nom = (location.hash.slice(1).split("?")[0]) || "activites";
+  document.querySelectorAll(".onglets a").forEach((a) => { if (a.hash === "#" + nom) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current"); });
+  vue.innerHTML = `<p class="doux">Chargement…</p>`;
+  try { await (VUES[nom] || activites)(); } catch (e) { vue.innerHTML = `<p class="message erreur">${echapper(e.message)}</p>`; }
+}
+addEventListener("hashchange", router);
+$("#deconnexion").addEventListener("click", async () => { await api("/api/sessions", { methode: "DELETE" }); location.replace("/"); });
+tete();
+router();
+</script>
+</body>
+</html>

@@ -1,20 +1,90 @@
-"""La carte hors-ligne (widget Trace) et ses boutons de zoom."""
-import math
+"""La carte (widget Trace) : tuiles OpenStreetMap partout dans le monde, boucle, trajet, départ et toi.
+Projection Mercator (celle des tuiles), mise à l'échelle pour que 1 unité = 1 mètre près de l'origine.
+Les tuiles sont téléchargées en arrière-plan puis gardées sur le disque : une zone déjà vue s'affiche
+hors connexion. Zoom : pincer, molette ou boutons. Tout est dessiné une fois puis déplacé par le GPU."""
+import math, os, threading, urllib.request, weakref
+from concurrent.futures import ThreadPoolExecutor
 
 from kivy.animation import Animation
-from kivy.graphics import (Color, Ellipse, InstructionGroup, Line, Mesh, PopMatrix,
-                           PushMatrix, Rotate, Scale, Translate, Triangle)
+from kivy.clock import Clock
+from kivy.graphics import (Color, Ellipse, InstructionGroup, Line, PopMatrix, PushMatrix, Rectangle, Rotate,
+                           Scale, Translate, Triangle)
 from kivy.metrics import dp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.stencilview import StencilView
 
 from geo import ecart
-from ui.widgets import CHEMIN, ENCRE, FOND, ROUTE, SIGNAL, SUR_SIGNAL, TRACE, TRACE_PALE, Bouton
+from ui import widgets
+from ui.widgets import BRUME, ENCRE, FOND, SIGNAL, SUR_SIGNAL, TRACE, TRACE_PALE, Bouton, lab
+
+R_TERRE = 6378137.0
+MONDE = 2 * math.pi * R_TERRE
+URL_TUILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"  # politique d'usage OSM : voir docs/CONFIGURATION.md
+AGENT = "Loopy/0.4 (+https://github.com/Vanvannnn/loopy)"
+
+
+def mercator(lat, lon):
+    lat = max(-85.05, min(85.05, lat))
+    return R_TERRE * math.radians(lon), R_TERRE * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
+
+
+def inverse(x, y):
+    return math.degrees(2 * math.atan(math.exp(y / R_TERRE)) - math.pi / 2), math.degrees(x / R_TERRE)
+
+
+class Tuiles:
+    """Cache partagé par toutes les cartes : disque, puis mémoire (textures). Un seul téléchargement par tuile."""
+    dossier = None
+    textures, en_cours, cartes = {}, set(), weakref.WeakSet()
+    pool = ThreadPoolExecutor(3)
+    verrou = threading.Lock()
+
+    @classmethod
+    def demander(cls, z, x, y):
+        cle = (z, x, y)
+        if cle in cls.textures or cle in cls.en_cours or cls.dossier is None:
+            return
+        cls.en_cours.add(cle)
+        chemin = os.path.join(cls.dossier, str(z), str(x), f"{y}.png")
+        if os.path.exists(chemin):
+            Clock.schedule_once(lambda dt: cls._charger(cle, chemin))
+        else:
+            cls.pool.submit(cls._telecharger, cle, chemin)
+
+    @classmethod
+    def _telecharger(cls, cle, chemin):
+        z, x, y = cle
+        try:
+            from boucles import contexte_ssl
+            req = urllib.request.Request(URL_TUILES.format(z=z, x=x, y=y), headers={"User-Agent": AGENT})
+            with urllib.request.urlopen(req, timeout=20, context=contexte_ssl()) as r:
+                data = r.read()
+            os.makedirs(os.path.dirname(chemin), exist_ok=True)
+            with open(chemin + ".tmp", "wb") as f:
+                f.write(data)
+            os.replace(chemin + ".tmp", chemin)
+            Clock.schedule_once(lambda dt: cls._charger(cle, chemin))
+        except Exception:  # hors connexion : la tuile sera redemandée au prochain dessin
+            Clock.schedule_once(lambda dt: cls.en_cours.discard(cle), 5)
+
+    @classmethod
+    def _charger(cls, cle, chemin):
+        from kivy.core.image import Image as CoreImage
+        try:
+            cls.textures[cle] = CoreImage(chemin).texture
+        except Exception:
+            try:
+                os.remove(chemin)  # fichier abîmé : on le retéléchargera
+            except OSError:
+                pass
+        cls.en_cours.discard(cle)
+        for c in list(cls.cartes):
+            c.redessiner_tuiles()
 
 
 def avec_zoom(trace, on_mode=None):
-    """La carte + gros boutons + / − (et le bouton d'orientation) par-dessus."""
+    """La carte + gros boutons + / − (et le bouton d'orientation), et l'attribution OpenStreetMap."""
     f = FloatLayout()
     trace.pos_hint = {"x": 0, "y": 0}  # sans pos_hint, FloatLayout laisse la carte collée en bas de l'écran
     f.add_widget(trace)
@@ -24,66 +94,67 @@ def avec_zoom(trace, on_mode=None):
     if on_mode:
         f.add_widget(Bouton("Sens de course", on_mode, "carte", 48, 15, size_hint=(None, None),
                             width=dp(150), pos_hint={"x": 0.03, "top": 0.97}))
+    f.add_widget(lab("© OpenStreetMap", 11, BRUME, size_hint=(None, None), size=(dp(110), dp(18)),
+                     pos_hint={"x": 0.02, "y": 0.005}))
     return f
 
 
 class Trace(StencilView):
-    """Fond hors-ligne (rues et chemins de data.db), boucle, trajet, départ et toi.
-    suivi=False : vue d'ensemble. suivi=True : centré sur toi.
-    Zoom : pincer, molette ou boutons. Le fond est dessiné une fois puis déplacé par le GPU."""
+    """suivi=False : vue d'ensemble (boucle, ou autour de « centre »). suivi=True : centré sur toi."""
     coords = ListProperty([])
+    autres = ListProperty([])  # les autres propositions, en pâle
     moi = ListProperty([])
     fait = ListProperty([])
     boucle_faite = ListProperty([])  # partie de la boucle déjà parcourue (grisée)
     depart = ListProperty([])
-    zone = ListProperty([])
+    centre = ListProperty([])  # vue d'ensemble sans boucle : autour de ce point
+    zone = ListProperty([])  # [lat, lon, rayon m] : la zone de recherche, en cercle discret
     suivi = BooleanProperty(False)
     angle = NumericProperty(0)  # rotation actuelle de la carte (animée)
     revele = NumericProperty(1)  # part de la boucle déjà tracée (animée quand une boucle arrive)
     orient = "marche"  # marche (direction de marche en haut), boussole, nord
     cap = None  # direction de marche, en degrés
     az = None  # direction du téléphone (boussole)
-    rayon = 250  # mètres visibles autour de toi au zoom 1
+    rayon = 250  # mètres visibles autour de toi au zoom 1 (suivi)
+    rayon_vue = 1500  # mètres visibles autour de « centre » (vue d'ensemble)
     choix = None  # fonction appelée quand on touche la carte
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.reseau, self.lat0, self.lon0, self.k = {}, None, 0, 1.0
+        self.x0 = self.y0 = None
+        self.k = 1.0
         self.zoom, self.pan, self.s, self.cx, self.cy = 1.0, [0.0, 0.0], 1.0, 0, 0
         self.touches, self.multi = {}, False
         self.tr, self.sc = Translate(0, 0), Scale(1, 1, 1)
         self.rot = Rotate(angle=0, axis=(0, 0, 1), origin=(0, 0))
-        self.g_res, self.g_dyn = InstructionGroup(), InstructionGroup()
-        for i in (PushMatrix(), self.rot, self.tr, self.sc, self.g_res, self.g_dyn, PopMatrix()):
+        self.g_tuiles, self.g_dyn = InstructionGroup(), InstructionGroup()
+        for i in (PushMatrix(), self.rot, self.tr, self.sc, self.g_tuiles, self.g_dyn, PopMatrix()):
             self.canvas.add(i)
-        self.bind(pos=self.dessiner, size=self.dessiner, zone=self.init_zone, coords=self.reset,
-                  suivi=self.reset, moi=self.dessiner, depart=self.dessiner, revele=self.dessiner)
+        Tuiles.cartes.add(self)
+        self.bind(pos=self.dessiner, size=self.dessiner, coords=self.reset, suivi=self.reset, centre=self.reset,
+                  moi=self.dessiner, depart=self.dessiner, revele=self.dessiner, autres=self.dessiner,
+                  zone=self.dessiner)
 
-    def mondial(self, lat, lon):  # degrés -> mètres autour du centre de la zone
-        return (lon - self.lon0) * self.k * 111000, (lat - self.lat0) * 111000
+    # --- projection ---
+    def _origine(self, lat, lon):
+        """L'origine suit le lieu : à plus de 50 km, on la replace (précision, et échelle locale juste)."""
+        x, y = mercator(lat, lon)
+        if self.x0 is None or math.hypot(x - self.x0, y - self.y0) * self.k > 50000:
+            self.x0, self.y0, self.k = x, y, math.cos(math.radians(lat))
+            self.g_tuiles.clear()
+
+    def mondial(self, lat, lon):  # degrés -> mètres autour de l'origine
+        x, y = mercator(lat, lon)
+        return (x - self.x0) * self.k, (y - self.y0) * self.k
 
     def geo(self, x, y):
-        return self.lat0 + y / 111000, self.lon0 + x / (self.k * 111000)
+        return inverse(x / self.k + self.x0, y / self.k + self.y0)
 
-    def init_zone(self, *_):
-        (la0, lo0), (la1, lo1) = self.zone
-        self.lat0, self.lon0 = (la0 + la1) / 2, (lo0 + lo1) / 2
-        self.k = math.cos(math.radians(self.lat0))
-        self.g_res.clear()
-        for t, couleur in ((0, ROUTE), (1, CHEMIN)):  # rues, chemins
-            self.g_res.add(Color(*couleur))
-            verts, idx = [], []
-            for pts in self.reseau.get(t, ()):
-                n = len(verts) // 4
-                for p in pts:
-                    verts += [*self.mondial(*p), 0, 0]
-                idx += [i for j in range(n, n + len(pts) - 1) for i in (j, j + 1)]
-                if len(verts) > 240000:  # un Mesh accepte au plus 65535 sommets
-                    self.g_res.add(Mesh(vertices=verts, indices=idx, mode="lines"))
-                    verts, idx = [], []
-            if idx:
-                self.g_res.add(Mesh(vertices=verts, indices=idx, mode="lines"))
-        self.dessiner()
+    def reference(self):
+        for pts in (self.coords, [self.moi] if self.suivi else [], [self.centre], [self.moi], [self.depart]):
+            if pts and len(pts[0]) == 2:
+                return pts[0]
+        return None
 
     def reset(self, *_):
         self.zoom, self.pan = 1.0, [0.0, 0.0]
@@ -97,7 +168,7 @@ class Trace(StencilView):
         Animation(revele=1, d=d, t="in_out_cubic").start(self)
 
     def zoomer(self, facteur):
-        self.zoom = min(12, max(0.4, self.zoom * facteur))
+        self.zoom = min(40, max(0.05, self.zoom * facteur))
         self.dessiner()
 
     def vue(self):
@@ -105,11 +176,13 @@ class Trace(StencilView):
             self.cx, self.cy = self.mondial(*self.moi)
             base = min(self.width, self.height) / (2 * self.rayon)
         else:
-            ref = self.coords if len(self.coords) >= 2 else self.zone
-            pts = [self.mondial(*p) for p in ref]
-            xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-            base = min((self.width - 40) / max(max(xs) - min(xs), 1),
-                       (self.height - 40) / max(max(ys) - min(ys), 1))
+            if len(self.coords) >= 2:
+                pts = [self.mondial(*p) for p in self.coords]
+                xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+            else:
+                c = self.mondial(*self.reference())
+                xs, ys = [c[0] - self.rayon_vue, c[0] + self.rayon_vue], [c[1] - self.rayon_vue, c[1] + self.rayon_vue]
+            base = min((self.width - 40) / max(max(xs) - min(xs), 1), (self.height - 40) / max(max(ys) - min(ys), 1))
             self.cx = (min(xs) + max(xs)) / 2 + self.pan[0]
             self.cy = (min(ys) + max(ys)) / 2 + self.pan[1]
         self.s = base * self.zoom
@@ -134,16 +207,48 @@ class Trace(StencilView):
     def on_angle(self, *_):
         self.rot.angle = self.angle
 
-    def dessiner(self, *_):
-        if self.lat0 is None or self.width < 2 or self.height < 2:
+    # --- tuiles ---
+    def redessiner_tuiles(self):
+        if self.x0 is None or self.width < 2:
             return
+        self.g_tuiles.clear()
+        cote_px = MONDE * self.k * self.s  # largeur du monde à l'écran, en pixels
+        z = max(2, min(19, round(math.log2(max(cote_px / dp(256), 1)))))
+        r = math.hypot(self.width, self.height) / 2 / self.s / self.k  # demi-diagonale, en mètres Mercator
+        xm, ym = self.cx / self.k + self.x0, self.cy / self.k + self.y0
+        jour = widgets.theme == "jour"
+        self.g_tuiles.add(Color(1, 1, 1, 1) if jour else Color(0.42, 0.47, 0.45, 1))  # la nuit, tuiles assombries
+        for zz in (z - 1, z):  # le niveau du dessous couvre les trous pendant le chargement
+            n, cote = 2 ** zz, MONDE / 2 ** zz
+            tx0, tx1 = int((xm - r + MONDE / 2) // cote), int((xm + r + MONDE / 2) // cote)
+            ty0, ty1 = int((MONDE / 2 - (ym + r)) // cote), int((MONDE / 2 - (ym - r)) // cote)
+            if (tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 80:
+                continue
+            for tx in range(tx0, tx1 + 1):
+                for ty in range(max(0, ty0), min(n - 1, ty1) + 1):
+                    cle = (zz, tx % n, ty)
+                    tex = Tuiles.textures.get(cle)
+                    if tex is None:
+                        if zz == z:
+                            Tuiles.demander(*cle)
+                        continue
+                    gx = (tx * cote - MONDE / 2 - self.x0) * self.k
+                    gy = (MONDE / 2 - (ty + 1) * cote - self.y0) * self.k
+                    self.g_tuiles.add(Rectangle(texture=tex, pos=(gx, gy), size=(cote * self.k, cote * self.k)))
+
+    def dessiner(self, *_):
+        ref = self.reference()
+        if ref is None or self.width < 2 or self.height < 2:
+            return
+        self._origine(*ref)
         self.vue()
+        self.redessiner_tuiles()
         self.g_dyn.clear()
         u = 1 / self.s  # un pixel, en mètres
 
         def ligne(pts, couleur, px):
             self.g_dyn.add(Color(*couleur))
-            self.g_dyn.add(Line(points=[v for p in pts for v in self.mondial(*p)], width=px * u))
+            self.g_dyn.add(Line(points=[v for p in pts for v in self.mondial(*p)], width=px * u, joint="round"))
 
         def disque(p, rayons):
             x, y = self.mondial(*p)
@@ -151,8 +256,16 @@ class Trace(StencilView):
                 self.g_dyn.add(Color(*c))
                 self.g_dyn.add(Ellipse(pos=(x - r * u, y - r * u), size=(2 * r * u, 2 * r * u)))
 
+        if len(self.zone) == 3:  # la zone de recherche : un cercle discret
+            x, y = self.mondial(*self.zone[:2])
+            self.g_dyn.add(Color(*ENCRE[:3], 0.35))
+            self.g_dyn.add(Line(circle=(x, y, self.zone[2]), width=1.5 * u))
+        for autre in self.autres:
+            if len(autre) >= 2:
+                ligne(autre, (*TRACE_PALE[:3], 0.9), 4)
         if len(self.coords) >= 2:
             n = max(2, int(len(self.coords) * self.revele))
+            ligne(self.coords[:n], FOND, 8)  # liseré : la boucle se détache des tuiles
             ligne(self.coords[:n], TRACE, 5)
         if len(self.boucle_faite) >= 2:
             ligne(self.boucle_faite, TRACE_PALE, 5)
@@ -218,6 +331,6 @@ class Trace(StencilView):
         self.touches.pop(t.uid, None)
         if not self.touches:
             self.multi = False
-        if simple and not bouge and self.choix and self.lat0 is not None:
+        if simple and not bouge and self.choix and self.x0 is not None:
             self.choix(*self.geo((t.pos[0] - self.tr.x) / self.s, (t.pos[1] - self.tr.y) / self.s))
         return True

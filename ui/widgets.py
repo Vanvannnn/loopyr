@@ -91,7 +91,7 @@ def fond(widget, couleur, rayon=0):
 
 def lab(texte, taille, couleur=None, gras=False, chiffres=False, aligne="left", **kw):
     l = Label(text=texte, font_size=f"{taille}sp", color=couleur or ENCRE, bold=gras, markup=True,
-              font_name="Chiffres" if chiffres else "Roboto", halign=aligne, valign="middle", **kw)
+              font_name="Chiffres" if chiffres else "Roboto", halign=aligne, **{"valign": "middle", **kw})
     l.bind(size=lambda i, s: setattr(i, "text_size", s))
     return l
 
@@ -474,3 +474,103 @@ class Splits(BoxLayout):
                                  size_hint_x=None, width=dp(54)))
             self.add_widget(ligne)
             Clock.schedule_once(lambda dt, b=barre: b.faire_pousser(0.5), 0.15 + 0.06 * i)
+
+
+# --- navigation, saisie, listes ---
+class Nav(BoxLayout):
+    """Barre du bas : les cinq destinations de l'app. L'onglet courant porte un filet sauge et passe en gras."""
+    ONGLETS = (("accueil", "Accueil"), ("sport", "Créer"), ("historique", "Historique"),
+               ("communaute", "Communauté"), ("profil", "Profil"))
+    GROUPES = {"distance": "sport", "plan": "sport", "detail": "historique"}
+
+    def __init__(self, aller, **kw):
+        super().__init__(size_hint_y=None, height=dp(62), padding=[dp(4), 0], **kw)
+        with self.canvas.before:
+            Color(*FOND)
+            self._fond = Rectangle()
+            Color(*FOND_2)
+            self._filet = Rectangle()
+            self._c_marque = Color(*TRACE)
+            self._marque = RoundedRectangle(radius=[0, 0, dp(2), dp(2)])
+        self.boutons = {}
+        for nom, texte in self.ONGLETS:
+            b = Bouton(texte, lambda b, n=nom: aller(n), "discret", 62, 13)
+            b.bold = False
+            self.boutons[nom] = b
+            self.add_widget(b)
+        self.bind(pos=self._maj, size=self._maj)
+        self.courant = "accueil"
+
+    def _maj(self, *_):
+        self._fond.pos, self._fond.size = self.pos, self.size
+        self._filet.pos, self._filet.size = (self.x, self.top - dp(1)), (self.width, dp(1))
+        b = self.boutons.get(self.courant)
+        if b:
+            Animation.cancel_all(self._marque)
+            Animation(pos=(b.x + dp(14), self.top - dp(3)), size=(b.width - dp(28), dp(3)), d=0.25,
+                      t="out_cubic").start(self._marque)
+
+    def montrer(self, ecran):
+        self.courant = self.GROUPES.get(ecran, ecran)
+        for nom, b in self.boutons.items():
+            b.bold = nom == self.courant
+            b.color = ENCRE if nom == self.courant else BRUME
+        Clock.schedule_once(self._maj)
+
+
+def champ(indice="", texte="", motdepasse=False, nombre_=False, **kw):
+    """Zone de saisie aux couleurs de l'app."""
+    from kivy.uix.textinput import TextInput
+    reglages = dict(text=texte, hint_text=indice, password=motdepasse, multiline=False, write_tab=False,
+                    size_hint_y=None, height=dp(52), font_size="18sp", padding=[dp(14), dp(14)],
+                    background_normal="", background_active="", background_color=FOND_2,
+                    foreground_color=ENCRE, hint_text_color=(*BRUME[:3], 0.8), cursor_color=TRACE,
+                    input_filter="float" if nombre_ else None)
+    reglages.update(kw)
+    return TextInput(**reglages)
+
+
+class Repartition(Widget):
+    """Barre empilée : parts d'un total (types de voies, revêtement). valeurs = [(part, couleur)]."""
+
+    def __init__(self, **kw):
+        super().__init__(size_hint_y=None, height=dp(10), **kw)
+        self.valeurs = []
+        self.bind(pos=self.dessiner, size=self.dessiner)
+
+    def remplir(self, valeurs):
+        self.valeurs = valeurs
+        self.dessiner()
+
+    def dessiner(self, *_):
+        self.canvas.clear()
+        total = sum(v for v, _ in self.valeurs) or 1
+        x = self.x
+        with self.canvas:
+            Color(*FOND_2)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(5)])
+            for v, c in self.valeurs:
+                w = self.width * v / total
+                Color(*c)
+                Rectangle(pos=(x, self.y), size=(w, self.height))
+                x += w
+
+
+def liste_defilante(espacement=0):
+    """(ScrollView, contenu) : un contenu vertical qui prend la hauteur de ce qu'il contient."""
+    from kivy.uix.scrollview import ScrollView
+    sv = ScrollView(do_scroll_x=False)
+    contenu = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(espacement))
+    contenu.bind(minimum_height=contenu.setter("height"))
+    sv.add_widget(contenu)
+    return sv, contenu
+
+
+def titre_ecran(texte, retour=None):
+    """Barre de titre : retour éventuel à gauche, titre en Barlow."""
+    b = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(6), padding=[dp(12), dp(4), dp(20), 0])
+    if retour:
+        b.add_widget(Bouton("‹ Retour", retour, "discret", 52, 17, size_hint_x=None, width=dp(100)))
+    b.titre = lab(texte, 30, gras=True, chiffres=True)
+    b.add_widget(b.titre)
+    return b

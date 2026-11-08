@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mot de passe oublié</title>
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+</head>
+<body>
+<header class="entete">
+  <div class="conteneur">
+    <a class="marque" href="/" aria-label="Loopy, accueil">
+      <img class="clair" src="/assets/img/loopy-horizontal-couleur-clair.svg" alt="Loopy" width="69" height="34">
+      <img class="sombre" src="/assets/img/loopy-horizontal-sombre.svg" alt="Loopy" width="69" height="34">
+    </a>
+    <nav class="nav" aria-label="Principale">
+      <a href="/creer.html">Créer une boucle</a>
+      <a class="large" href="/communaute.html">Communauté</a>
+      <a href="/connexion.html" data-compte>Se connecter</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page-etroite">
+  <h1>Mot de passe oublié</h1>
+  <p class="doux">Indique l'adresse de ton compte : tu recevras un lien pour choisir un nouveau mot de passe. Il reste valable une heure.</p>
+  <form novalidate>
+    <div class="champ"><label for="email">Adresse e-mail</label><input id="email" name="email" type="email" autocomplete="email" required></div>
+    <p id="msg" class="message" role="alert" hidden></p>
+    <div class="rangee" style="margin-top:20px"><button class="bouton" type="submit">Envoyer le lien</button>
+      <a class="bouton discret" href="/connexion.html">Retour à la connexion</a></div>
+  </form>
+</main>
+<script type="module">
+import { api } from "/assets/js/commun.js";
+const f = document.querySelector("form"), msg = document.getElementById("msg");
+f.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const b = f.querySelector("button[type=submit]");
+  b.disabled = true; msg.hidden = true;
+  try {
+    const r = await api("/api/mot-de-passe/oubli", { methode: "POST", corps: { email: f.email.value } });
+    msg.className = "message"; msg.textContent = r.message; msg.hidden = false;
+  } catch (err) {
+    msg.className = "message erreur"; msg.textContent = err.message; msg.hidden = false;
+  } finally { b.disabled = false; }
+});
+</script>
+</body>
+</html>

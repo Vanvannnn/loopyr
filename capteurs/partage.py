@@ -35,3 +35,15 @@ def exporter(nom_fichier, texte, dossier_pc):
     envoi.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     act.startActivity(Intent.createChooser(envoi, chaine("Partager la course")))
     return "GPX enregistré dans Téléchargements/Loopy"
+
+
+def ouvrir_url(url):
+    """Ouvre une page dans le navigateur (connexion à Strava, espace web)."""
+    if platform != "android":
+        import webbrowser
+        webbrowser.open(url)
+        return
+    from jnius import autoclass
+    from capteurs.android import activite
+    Intent, Uri = autoclass("android.content.Intent"), autoclass("android.net.Uri")
+    activite().startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))

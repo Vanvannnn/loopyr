@@ -1,51 +1,50 @@
 # Loopy
 
-Application Android (Kivy) qui génère, **hors-ligne**, des boucles de course d'une distance et d'un
-dénivelé voulus, puis suit la course : carte centrée sur toi, chrono, allure, vitesse,
-D+, progression sur la boucle, splits par km annoncés à la voix, et export GPX.
+Choisis vélo ou course, indique la distance : Loopy trace autour de ta position une **vraie boucle** qui revient à ton point de départ, **partout dans le monde**. Pendant la sortie, l'app te suit (carte, chrono, allure ou vitesse, D+, progression, splits annoncés à la voix). Ensuite, tu retrouves ta sortie, tu l'envoies sur Strava ou tu la partages.
 
-## Démarrage
+Le projet contient trois parties :
 
-```bash
-# 1. Données de la zone (une fois, sur PC avec internet) -> data.db
-pip install -r requirements-data.txt
-python prepare_data.py --lat 44.823 --lon -0.445 --rayon 5000
+| Dossier | Partie |
+|---|---|
+| racine, `ui/`, `capteurs/`, `service/` | L'**app Android** (Python, Kivy, buildozer) |
+| `serveur/` | Le **serveur** (FastAPI, SQLite) : comptes, profils, activités, communauté, Strava, génération pour le site |
+| `website/` | Le **site** : présentation, création de boucle, compte et espace personnel. Servi par le serveur |
 
-# 2. Test sur PC : un coureur simulé suit la boucle (touche D : détour hors du parcours)
-python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python main.py
-.venv/bin/pytest            # tests de la logique (sans Kivy)
-
-# 3. APK (Linux ou WSL) -> bin/
-buildozer android debug
-```
-
-## Organisation
+Le code métier en Python pur est **partagé** par l'app et le serveur. Il est à la racine :
 
 | Fichier | Rôle |
 |---|---|
-| `core.py` | Carte (data.db) et génération de boucles : Dijkstra aller/retour, poids des pentes ajusté au D+ voulu |
-| `course.py` | Une course : points horodatés, pauses, splits, vitesse, D+ |
-| `journal.py` | Course en cours dans un fichier sqlite partagé avec le service GPS ; rejouable après un crash |
-| `progression.py` | Position sur la boucle, km restants, détection de sortie du parcours |
-| `annonces.py` | Annonces vocales (splits, sortie du parcours) |
-| `gpx.py`, `stockage.py` | Export GPX ; historique (un fichier JSON par activité, écritures atomiques) |
-| `geo.py` | Distances, caps, projection locale |
-| `service/suivi.py` | Service Android en premier plan : GPS + annonces, même écran éteint |
-| `capteurs/` | GPS de l'app, boussole, voix, partage, simulateur PC |
-| `ui/` | Écrans Kivy (préparation, course, historique, détail), widget carte, thèmes jour/nuit et animations (`ui/widgets.py`), symbole du logo (`ui/logo.py`) |
-| `polices/` | Barlow Condensed (chiffres) et Atkinson Hyperlegible (texte), licence OFL |
-| `logo/` | Kit du logo dans `logo/kit/` (SVG, icônes, guide `GUIDE.md`) ; `python logo/kit/construire.py` le refait, avec l'icône et l'écran de lancement Android (`logo/icone.png`, `logo/lancement.png`). Outils de dev : `pip install skia-pathops fonttools cairosvg pillow` |
+| `boucles.py` | Génération des boucles : zone dynamique, plusieurs directions, notation, revêtement et confiance. Client du moteur BRouter |
+| `profils/` | Profils de calcul écrits pour Loopy : vélo de route et course à pied |
+| `gpx.py` | Deux exports distincts : l'itinéraire prévu (sans heure) et l'activité réalisée (horodatée) |
+| `course.py`, `journal.py`, `progression.py`, `annonces.py` | La sortie : points GPS, pauses, splits, D+, journal partagé avec le service GPS, annonces vocales |
+| `geo.py` | Distances, caps, altitude d'après la boucle, masquage du départ, réduction des tracés |
+| `stockage.py` | Activités et boucles enregistrées sur le téléphone (écritures atomiques) |
+| `compte.py` | Client du serveur pour l'app (même compte que le site) |
 
-Pendant une course, le service (ou le simulateur sur PC) écrit chaque position dans le journal ;
-l'écran de course relit ce journal toutes les 0,5 s. Si l'app est tuée, la course continue dans le
-service et est proposée à la reprise au prochain lancement.
+## Démarrer
 
-## Mettre une course sur Strava
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/uvicorn serveur.app:app --reload    # API et site : http://localhost:8000
+.venv/bin/python main.py                      # l'app sur PC (sortie simulée, touche D : détour)
+.venv/bin/pytest                              # les tests
+buildozer android debug                       # l'APK
+```
 
-Profil → toucher une course → **Exporter GPX** : le fichier est enregistré dans
-`Téléchargements/Loopy` et le menu Partager s'ouvre. L'app mobile Strava n'importe pas de fichiers :
-l'import se fait sur **strava.com → (+) → Importer une activité → Fichier**.
+L'app fonctionne **sans compte ni serveur** : génération, sortie, historique et GPX restent sur le téléphone. Le compte ajoute la synchronisation, la communauté et Strava.
 
-L'upload direct via l'API Strava (`POST /api/v3/uploads`, `data_type=gpx`) pourra s'ajouter plus tard :
-le GPX est déjà au bon format et chaque activité a un champ `strava_id` prévu pour ça.
+## Documentation
+
+- [docs/AUDIT.md](docs/AUDIT.md) : l'existant, la cause de la limite géographique, le plan, le choix du moteur
+- [docs/CONFIGURATION.md](docs/CONFIGURATION.md) : variables d'environnement, Strava, e-mails, mise en production, BRouter, tuiles, APK
+- [docs/BILAN.md](docs/BILAN.md) : ce qui est terminé, les tests réellement exécutés, ce qui demande une intervention extérieure
+- [website/README.md](website/README.md) : le site
+- [logo/kit/GUIDE.md](logo/kit/GUIDE.md) : le logo et l'identité Sauge & Pêche
+
+## Données et licences
+
+- Cartes et itinéraires : © les contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright) (ODbL), attribution affichée dans l'app et le site.
+- Calcul des itinéraires : [BRouter](https://github.com/abrensch/brouter) (MIT). `profils/loopy-velo-route.brf` est dérivé de son profil `fastbike`.
+- Recherche de lieux : Nominatim (OSM).
+- Polices : Barlow Condensed et Atkinson Hyperlegible, sous licence OFL (`polices/`).

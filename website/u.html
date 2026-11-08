@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Profil</title>
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+<style>
+  .titre-page { padding: 40px 0 24px; }
+  .titre-page h1 { font-size: clamp(2.6rem, 7vw, 4.4rem); margin-bottom: 12px; }
+  .mosaique { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 32px 24px; }
+  .tuile .apercu { aspect-ratio: 4 / 3; background: var(--fond-2); border-radius: var(--r); }
+  .tuile .apercu svg { width: 100%; height: 100%; padding: 12%; }
+  .tuile h3 { font-size: 1.35rem; margin: 12px 0 4px; }
+  .tuile .chiffres { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: .95rem; }
+  .section-titre { font-size: 2rem; margin: 40px 0 18px; }
+  .avatar { width: 84px; height: 84px; border-radius: 50%; background: var(--sauge); object-fit: cover; display: grid; place-items: center;
+    font: 800 2.4rem/1 var(--chiffres); color: #22322B; flex-shrink: 0; }
+  .personne { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .personne .avatar { width: 44px; height: 44px; font-size: 1.3rem; }
+</style>
+</head>
+<body>
+<header class="entete">
+  <div class="conteneur">
+    <a class="marque" href="/" aria-label="Loopy, accueil">
+      <img class="clair" src="/assets/img/loopy-horizontal-couleur-clair.svg" alt="Loopy" width="69" height="34">
+      <img class="sombre" src="/assets/img/loopy-horizontal-sombre.svg" alt="Loopy" width="69" height="34">
+    </a>
+    <nav class="nav" aria-label="Principale">
+      <a href="/creer.html">Créer une boucle</a>
+      <a class="large" href="/communaute.html">Communauté</a>
+      <a href="/connexion.html" data-compte>Se connecter</a>
+    </nav>
+  </div>
+</header>
+<main class="conteneur" id="vue"><p class="doux" style="padding:40px 0">Chargement…</p></main>
+<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p></div></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+import { api, moi, SPORTS, km, duree, echapper, toast } from "/assets/js/commun.js";
+import { tuileActivite, avatar } from "/assets/js/apercu.js";
+const nom = new URLSearchParams(location.search).get("nom") || "", vue = document.getElementById("vue");
+async function charger() {
+  const [p, u] = await Promise.all([api(`/api/utilisateurs/${encodeURIComponent(nom)}`), moi()]);
+  document.title = p.nom;
+  const ps = p.stats.par_sport, ligne = (s) => ps[s] ? `<div class="stat"><span class="chiffre">${km(ps[s].distance, 0)} km</span><span class="doux">${SPORTS[s].nom}, ${ps[s].nombre} sortie${ps[s].nombre > 1 ? "s" : ""}, ${duree(ps[s].duree)}</span></div>` : "";
+  vue.innerHTML = `<div class="titre-page" style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">${avatar(p)}
+      <div style="flex:1;min-width:200px"><h1 style="margin:0">${echapper(p.nom)}</h1><p class="doux">${echapper(p.bio || "")}</p>
+        <p class="petit">${p.abonnes} abonné${p.abonnes > 1 ? "s" : ""}, ${p.abonnements} abonnement${p.abonnements > 1 ? "s" : ""}, sport favori : ${SPORTS[p.sport].nom.toLowerCase()}</p></div>
+      ${u && u.nom !== p.nom ? `<button class="bouton${p.suivi ? " second" : ""}" id="suivre" type="button">${p.suivi ? "Ne plus suivre" : "Suivre"}</button>` : ""}
+      ${!u ? `<a class="bouton second" href="/connexion.html?suite=${encodeURIComponent(location.pathname + location.search)}">Se connecter pour suivre</a>` : ""}</div>
+    <div class="rangee" style="gap:40px;margin-bottom:24px">${ligne("course")}${ligne("velo")}</div>
+    <h2 class="section-titre">Sorties</h2>
+    <div class="mosaique">${p.activites.map(tuileActivite).join("") || `<p class="vide">Aucune sortie visible pour toi.</p>`}</div>`;
+  document.getElementById("suivre")?.addEventListener("click", async () => {
+    try { await api(`/api/utilisateurs/${encodeURIComponent(p.nom)}/abonnement`, { methode: p.suivi ? "DELETE" : "POST" }); charger(); }
+    catch (e) { toast(e.message); }
+  });
+}
+charger().catch((e) => { vue.innerHTML = `<p class="message erreur" style="margin-top:40px">${echapper(e.message)}</p>`; });
+</script>
+</body>
+</html>

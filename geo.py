@@ -51,3 +51,42 @@ class Cap:
             self.valeur = nouveau if self.valeur is None else (self.valeur + 0.6 * ecart(self.valeur, nouveau)) % 360
             self.dernier = p
         return self.valeur
+
+
+def rogner(coords, m=300):
+    """Retire les m premiers et derniers mètres d'un tracé : le départ (souvent le domicile) n'est pas montré
+    aux autres. Un tracé trop court pour être rogné n'est pas montré du tout."""
+    if len(coords) < 2:
+        return []
+    cumul = [0.0]
+    for a, b in zip(coords, coords[1:]):
+        cumul.append(cumul[-1] + haversine(a, b))
+    if cumul[-1] <= 2 * m + 100:
+        return []
+    return [p for p, d in zip(coords, cumul) if m <= d <= cumul[-1] - m]
+
+
+def reduire(coords, n=400):
+    """Au plus n points (affichage d'aperçus), en gardant le premier et le dernier."""
+    if len(coords) <= n:
+        return list(coords)
+    pas = (len(coords) - 1) / (n - 1)
+    return [coords[round(i * pas)] for i in range(n)]
+
+
+class Altitudes:
+    """Altitude d'une position d'après le point le plus proche de la boucle prévue (à moins de 80 m)."""
+
+    def __init__(self, coords, ele, case=0.001):
+        self.case, self.grille = case, {}
+        for (lat, lon), e in zip(coords, ele or ()):
+            if e is not None:
+                self.grille.setdefault((int(lat // case), int(lon // case)), []).append((lat, lon, e))
+
+    def __call__(self, lat, lon):
+        i, j = int(lat // self.case), int(lon // self.case)
+        proches = [p for di in (-1, 0, 1) for dj in (-1, 0, 1) for p in self.grille.get((i + di, j + dj), ())]
+        if not proches:
+            return None
+        d, e = min((haversine((lat, lon), p[:2]), p[2]) for p in proches)
+        return e if d <= 80 else None

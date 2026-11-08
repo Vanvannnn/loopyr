@@ -1,4 +1,6 @@
-"""Écran 3 : l'historique des courses, et le détail d'une course (trace, splits, export GPX)."""
+"""L'historique : les activités réellement faites, les boucles enregistrées et favorites ; le détail d'une
+activité (tracé, splits, GPX de l'activité, envoi vers Strava, visibilité)."""
+import threading
 import time
 
 from kivy.animation import Animation
@@ -16,8 +18,9 @@ from course import fmt_allure
 from gpx import exportable, gpx
 from ui.carte import Trace, avec_zoom
 from ui.ecran_course import chrono
-from ui.widgets import (BRUME, ENCRE, FOND, FOND_2, ROUTE, TRACE, Bouton, Croissance, Splits, apparaitre, echelle,
-                        confirmer, desarmer, fond, hexa_de, lab, nombre, unite)
+from compte import ErreurCompte
+from ui.widgets import (BRUME, ENCRE, FOND, FOND_2, ROUTE, TRACE, Bouton, Croissance, Segmente, Splits, apparaitre,
+                        echelle, confirmer, desarmer, fond, hexa_de, lab, nombre, unite)
 
 JOURS = ("lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim.")
 MOIS = ("janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc.")
@@ -26,6 +29,13 @@ SEMAINE = 7 * 86400
 
 def allure_moy(act):
     return fmt_allure(act["distance"] / act["duree"]) if act.get("duree") else "--:--"
+
+
+def rythme(act):
+    """Allure (min/km) en course, vitesse moyenne (km/h) à vélo."""
+    if act.get("sport") == "velo":
+        return f"{nombre(act['distance'] / act['duree'] * 3.6) if act.get('duree') else '--'} km/h"
+    return f"{allure_moy(act)} /km"
 
 
 def debut(act):
@@ -109,9 +119,9 @@ class Semaines(BoxLayout):
 
 
 class Ligne(ButtonBehavior, BoxLayout):
-    """Une course de la liste : date et allure à gauche, distance en gros à droite."""
+    """Une ligne de liste : deux lignes de texte à gauche, la distance en gros à droite."""
 
-    def __init__(self, act, action, **kw):
+    def __init__(self, haut, bas, km, action, **kw):
         super().__init__(size_hint_y=None, height=dp(74), padding=[0, dp(10)], **kw)
         echelle(self)  # avant le fond : la ligne entière grandit à son arrivée
         with self.canvas.before:
@@ -121,11 +131,11 @@ class Ligne(ButtonBehavior, BoxLayout):
             self._filet = Rectangle()
         self.bind(pos=self._maj, size=self._maj, state=self._maj, on_release=lambda *_: action())
         gauche = BoxLayout(orientation="vertical")
-        gauche.add_widget(lab(date_fr(act), 17, gras=True))
-        gauche.add_widget(lab(f"{chrono(act.get('duree') or 0)}  {allure_moy(act)} /km", 19, BRUME, chiffres=True))
+        gauche.add_widget(lab(haut, 17, gras=True, shorten=True, shorten_from="right"))
+        gauche.add_widget(lab(bas, 17, BRUME, chiffres=True))
         self.add_widget(gauche)
-        self.add_widget(lab(f"{nombre(act['distance'] / 1000, 2)}{unite('km', 15)}", 38, gras=True, chiffres=True,
-                            aligne="right", size_hint_x=0.55))
+        self.add_widget(lab(f"{nombre(km, 2)}{unite('km', 15)}", 34, gras=True, chiffres=True,
+                            aligne="right", size_hint_x=0.5))
 
     def _maj(self, *_):
         self._c.rgba = FOND_2 if self.state == "down" else FOND
@@ -142,32 +152,47 @@ def barre_titre(titre, retour):
     return b
 
 
-class EcranProfil(Screen):
+class EcranHistorique(Screen):
     compte = NumericProperty(0)  # total de km affiché, qui défile jusqu'au vrai total
 
     def __init__(self, app, **kw):
-        super().__init__(name="profil", **kw)
+        super().__init__(name="historique", **kw)
         self.app = app
-        col = BoxLayout(orientation="vertical", padding=[dp(20), dp(4), dp(20), 0])
-        col.add_widget(barre_titre("Historique", lambda *_: app.aller("plan", "retour")))
+        col = BoxLayout(orientation="vertical", padding=[dp(20), dp(8), dp(20), 0], spacing=dp(6))
+        self.onglet = Segmente((("activites", "Activités"), ("boucles", "Boucles"), ("favoris", "Favorites")),
+                               "activites")
+        self.onglet.bind(choix=self.remplir)
+        col.add_widget(self.onglet)
         sv = ScrollView(do_scroll_x=False)
         self.contenu = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(6))
         self.contenu.bind(minimum_height=self.contenu.setter("height"))
-        self.l_totaux = lab("", 88, gras=True, chiffres=True, size_hint_y=None, height=dp(96))
+        self.l_totaux = lab("", 80, gras=True, chiffres=True, size_hint_y=None, height=dp(88))
         self.l_soustitre = lab("", 16, BRUME, size_hint_y=None, height=dp(24))
-        self.l_semaine = lab("", 16, gras=True, size_hint_y=None, height=dp(48))
+        self.l_semaine = lab("", 16, gras=True, size_hint_y=None, height=dp(44))
         self.semaines = Semaines()
+        self.entete = [self.l_totaux, self.l_soustitre, self.l_semaine, self.semaines, Widget(size_hint_y=None, height=dp(14))]
         self.liste = BoxLayout(orientation="vertical", size_hint_y=None)
         self.liste.bind(minimum_height=self.liste.setter("height"))
-        for w in (self.l_totaux, self.l_soustitre, self.l_semaine, self.semaines,
-                  Widget(size_hint_y=None, height=dp(18)), self.liste):
-            self.contenu.add_widget(w)
         sv.add_widget(self.contenu)
         col.add_widget(sv)
         self.add_widget(col)
         self.bind(on_pre_enter=self.remplir)
 
     def remplir(self, *_):
+        self.contenu.clear_widgets()
+        self.liste.clear_widgets()
+        if self.onglet.choix == "activites":
+            for w in self.entete:
+                self.contenu.add_widget(w)
+            self.activites()
+        else:
+            self.boucles(self.onglet.choix == "favoris")
+        self.contenu.add_widget(self.liste)
+        for i, ligne in enumerate(self.liste.children[::-1][:8]):  # les premières arrivent l'une après l'autre
+            ligne.opacity = 0
+            Clock.schedule_once(lambda dt, l=ligne: apparaitre(l, 0.3, 0.97), 0.2 + 0.05 * i)
+
+    def activites(self):
         acts = self.app.stockage.lister()
         km = sum(a["distance"] for a in acts) / 1000
         temps = sum(a.get("duree") or 0 for a in acts)
@@ -176,26 +201,39 @@ class EcranProfil(Screen):
         self.compte = 0
         Animation(compte=km, d=0.8, t="out_cubic").start(self)
         n = len(acts)
-        self.l_soustitre.text = (f"{n} course{'s' if n > 1 else ''}, {duree_longue(temps)} de course, "
+        self.l_soustitre.text = (f"{n} sortie{'s' if n > 1 else ''}, {duree_longue(temps)} en mouvement, "
                                  f"{dplus:.0f} m de D+")
         semaines = km_par_semaine(acts, time.time())
         self.semaines.remplir(semaines)
         self.l_semaine.text = f"Cette semaine : [color={hexa_de(TRACE)}]{nombre(semaines[-1][1])} km[/color]"
-        self.liste.clear_widgets()
         if not acts:
-            self.liste.add_widget(lab("Pas encore de course. Génère une boucle et pars.", 17, BRUME,
-                                      size_hint_y=None, height=dp(60)))
-            self.liste.add_widget(Bouton("Préparer une sortie", lambda *_: self.app.aller("plan", "retour"),
-                                         "encre", 64))
-        for i, a in enumerate(acts):
-            ligne = Ligne(a, lambda id_=a["id"]: self.app.ecran_detail.ouvrir(id_))
-            self.liste.add_widget(ligne)
-            if i < 8:  # les premières lignes arrivent l'une après l'autre ; les suivantes sont hors écran
-                ligne.opacity = 0
-                Clock.schedule_once(lambda dt, l=ligne: apparaitre(l, 0.3, 0.97), 0.25 + 0.05 * i)
+            self.liste.add_widget(lab("Pas encore de sortie. Une boucle générée n'en est pas une : pars, "
+                                      "le GPS enregistre ta sortie.", 17, BRUME, size_hint_y=None, height=dp(70)))
+            self.liste.add_widget(Bouton("Créer une boucle", lambda *_: self.app.aller("sport"), "encre", 64))
+        for a in acts:
+            sport = "Vélo" if a.get("sport") == "velo" else "Course"
+            self.liste.add_widget(Ligne(f"{sport}, {date_fr(a)}", f"{chrono(a.get('duree') or 0)}  {rythme(a)}",
+                                        a["distance"] / 1000, lambda id_=a["id"]: self.app.ecran_detail.ouvrir(id_)))
+
+    def boucles(self, favoris):
+        its = [i for i in self.app.itineraires.lister() if i.get("favori") or not favoris]
+        if not its:
+            self.liste.add_widget(lab("Aucune boucle favorite. Ouvre une boucle et touche « Favorite »." if favoris else
+                                      "Aucune boucle enregistrée. Après une génération, touche « Enregistrer ».",
+                                      17, BRUME, size_hint_y=None, height=dp(70)))
+        for i in its:
+            bas = f"{'Vélo' if i['sport'] == 'velo' else 'Course'}, {(i.get('montee') or 0):.0f} m D+" + \
+                  (", favorite" if i.get("favori") else "")
+            self.liste.add_widget(Ligne(i["nom"], bas, i["distance"] / 1000, lambda id_=i["id"]: self.ouvrir_boucle(id_)))
+
+    def ouvrir_boucle(self, id_):
+        self.app.ecran_plan.montrer_itineraire(self.app.itineraires.charger(id_))
 
     def on_compte(self, *_):
         self.l_totaux.text = f"{nombre(self.compte)}{unite('km', 22)}"
+
+
+VISIBILITES = (("prive", "Moi seul"), ("abonnes", "Abonnés"), ("public", "Tout le monde"))
 
 
 class EcranDetail(Screen):
@@ -203,42 +241,50 @@ class EcranDetail(Screen):
         super().__init__(name="detail", **kw)
         self.app, self.act = app, None
         col = BoxLayout(orientation="vertical")
-        self.barre = barre_titre("", lambda *_: app.aller("profil", "retour"))
+        self.barre = barre_titre("", lambda *_: app.aller("historique", "retour"))
         self.barre.padding = [dp(20), dp(4), dp(20), 0]
         self.trace = Trace()
-        panneau = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(390),
-                            padding=[dp(20), dp(10), dp(20), dp(18)], spacing=dp(8))
+        panneau = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(430),
+                            padding=[dp(20), dp(10), dp(20), dp(16)], spacing=dp(8))
         fond(panneau, FOND)
-        self.l_titre = lab("", 72, gras=True, chiffres=True, size_hint_y=None, height=dp(78))
+        self.l_titre = lab("", 64, gras=True, chiffres=True, size_hint_y=None, height=dp(70))
         chiffres = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(12))
-        self.cases = []
+        self.cases, self.legendes = [], []
         for legende, couleur in (("temps", None), ("allure, min/km", None), ("dénivelé", TRACE)):
             c = BoxLayout(orientation="vertical")
             v = lab("", 30, couleur or ENCRE, gras=True, chiffres=True)
             c.add_widget(v)
-            c.add_widget(lab(legende, 13, BRUME, size_hint_y=None, height=dp(18)))
+            l = lab(legende, 13, BRUME, size_hint_y=None, height=dp(18))
+            c.add_widget(l)
             self.cases.append(v)
+            self.legendes.append(l)
             chiffres.add_widget(c)
         sv = ScrollView(do_scroll_x=False)
         self.splits = Splits()
         sv.add_widget(self.splits)
-        self.l_info = lab("", 14, BRUME, size_hint_y=None, height=dp(22))
-        bas = BoxLayout(size_hint_y=None, height=dp(68), spacing=dp(10))
-        self.btn_gpx = Bouton("Exporter le GPX", self.exporter, "encre", 68, 19)
-        self.btn_suppr = Bouton("Supprimer", self.supprimer, "contour", 68, 17, size_hint_x=0.6)
-        bas.add_widget(self.btn_gpx)
-        bas.add_widget(self.btn_suppr)
-        for w in (self.l_titre, chiffres, sv, self.l_info, bas):
+        self.l_info = lab("", 14, BRUME, size_hint_y=None, height=dp(40))
+        self.visibilite = Segmente(VISIBILITES, "abonnes", hauteur=46)
+        self.visibilite.bind(choix=self.changer_visibilite)
+        bas = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(8))
+        self.btn_gpx = Bouton("GPX", self.exporter, "contour", 60, 17)
+        self.btn_strava = Bouton("Vers Strava", self.strava, "encre", 60, 17)
+        self.btn_suppr = Bouton("Supprimer", self.supprimer, "contour", 60, 16, size_hint_x=0.8)
+        for b in (self.btn_gpx, self.btn_strava, self.btn_suppr):
+            bas.add_widget(b)
+        for w in (self.l_titre, chiffres, sv, self.l_info, self.visibilite, bas):
             panneau.add_widget(w)
         for w in (self.barre, avec_zoom(self.trace), panneau):
             col.add_widget(w)
         self.add_widget(col)
 
-    def ouvrir(self, id_):
+    def ouvrir(self, id_, sens="avant"):
         a = self.act = self.app.stockage.charger(id_)
-        self.barre.titre.text = date_fr(a)
+        velo = a.get("sport") == "velo"
+        self.barre.titre.text = ("Vélo, " if velo else "Course, ") + date_fr(a)
         self.l_titre.text = f"{nombre(a['distance'] / 1000, 2)}{unite('km', 22)}"
-        for case, texte in zip(self.cases, (chrono(a.get("duree") or 0), allure_moy(a),
+        self.legendes[1].text = "vitesse moyenne" if velo else "allure, min/km"
+        moy = rythme(a).replace(" /km", "") if not velo else rythme(a)
+        for case, texte in zip(self.cases, (chrono(a.get("duree") or 0), moy,
                                             f"{a.get('denivele') or 0:.0f}{unite('m', 14)}")):
             case.text = texte
         pts = [(p[1], p[2]) for seg in a.get("segments") or () for p in seg] or a.get("trace") or []
@@ -246,9 +292,19 @@ class EcranDetail(Screen):
         self.trace.tracer([tuple(p) for p in pts[::pas]], 0.9)
         self.splits.remplir(a.get("splits") or ())
         self.btn_gpx.disabled = not exportable(a)
-        self.l_info.text = "" if exportable(a) else "Course d'avant la mise à jour, sans heure par point : pas d'export"
+        self._charge = True
+        self.visibilite.choix = a.get("visibilite") or self.app.reglages.get("visibilite", "abonnes")
+        self._charge = False
+        self.visibilite.disabled = not self.app.compte.connecte
+        if not exportable(a):
+            self.l_info.text = "Sortie d'avant la mise à jour, sans heure par point : pas d'export"
+        elif not self.app.compte.connecte:
+            self.l_info.text = "Connecte-toi (Profil) pour la partager et l'envoyer vers Strava."
+        else:
+            self.l_info.text = "Synchronisée avec ton compte." if a.get("id_serveur") else "Pas encore synchronisée."
         desarmer(self.btn_suppr)
-        self.app.aller("detail")
+        self.btn_strava.disabled = not exportable(a)
+        self.app.aller("detail", sens)
 
     def exporter(self, *_):
         a = self.act
@@ -257,8 +313,69 @@ class EcranDetail(Screen):
         except Exception as err:
             self.l_info.text = f"Export impossible : {err}"
 
+    def _en_fond(self, travail, fini):
+        """travail() dans un fil (réseau), puis fini(résultat ou ErreurCompte) dans le fil de Kivy."""
+        def fil():
+            try:
+                r = travail()
+            except ErreurCompte as e:
+                r = e
+            Clock.schedule_once(lambda dt: fini(r))
+        threading.Thread(target=fil, daemon=True).start()
+
+    def _id_serveur(self):
+        """L'activité doit exister sur le serveur avant d'être partagée ou envoyée : on l'y met si besoin."""
+        a = self.act
+        if not a.get("id_serveur"):
+            r = self.app.compte.envoyer_activite(a)
+            a["id_serveur"] = r["id"]
+            self.app.stockage.enregistrer(a)
+        return a["id_serveur"]
+
+    def changer_visibilite(self, _, valeur):
+        if getattr(self, "_charge", False) or not self.act or not self.app.compte.connecte:
+            return
+        self.act["visibilite"] = valeur
+        self.app.stockage.enregistrer(self.act)
+        nom = dict(VISIBILITES)[valeur].lower()
+        self._en_fond(lambda: self.app.compte.modifier_activite(self._id_serveur(), visibilite=valeur),
+                      lambda r: setattr(self.l_info, "text", r if isinstance(r, Exception) else f"Visible par : {nom}"))
+
+    def strava(self, *_):
+        if not self.app.compte.connecte:
+            self.l_info.text = "Connecte-toi d'abord à ton compte Loopy (Profil), puis relie Strava."
+            return
+        self.btn_strava.disabled = True
+        self.l_info.text = "Envoi à Strava…"
+        self._en_fond(lambda: self.app.compte.envoyer_strava(self._id_serveur()), self._strava_suite)
+
+    def _strava_suite(self, r, essais=0):
+        if isinstance(r, ErreurCompte):
+            self.btn_strava.disabled = False
+            if r.code == 404 or "non connecté" in str(r):
+                self.l_info.text = "Relie d'abord ton compte Strava (Profil > Strava)."
+            else:
+                self.l_info.text = str(r)
+            return
+        if r["statut"] == "pret":
+            self.l_info.text = "Sur Strava : c'est fait."
+            self.btn_strava.text = "Sur Strava"
+            return
+        if r["statut"] == "erreur":
+            self.l_info.text = f"Strava a refusé : {r['erreur']}"
+            self.btn_strava.disabled = False
+            return
+        if essais >= 30:
+            self.l_info.text = "Strava traite encore l'activité : regarde dans quelques minutes."
+            self.btn_strava.disabled = False
+            return
+        self.l_info.text = "Strava traite l'activité…"  # traitement asynchrone : on suit toutes les 2 s
+        id_s = self.act["id_serveur"]
+        Clock.schedule_once(lambda dt: self._en_fond(lambda: self.app.compte.suivre_strava(id_s),
+                                                     lambda r2: self._strava_suite(r2, essais + 1)), 2)
+
     def supprimer(self, btn):
         def go():
             self.app.stockage.supprimer(self.act["id"])
-            self.app.aller("profil", "retour")
+            self.app.aller("historique", "retour")
         confirmer(btn, "Supprimer ?", go)

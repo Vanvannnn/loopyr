@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strava</title>
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+</head>
+<body>
+<main class="page-etroite">
+  <img src="/assets/img/loopy-symbole-couleur-clair.svg" alt="" width="72" height="72" style="margin-bottom:24px">
+  <h1 id="titre">Strava</h1>
+  <p id="texte" class="doux"></p>
+</main>
+<script>
+  const s = new URLSearchParams(location.search).get("strava");
+  const m = { ok: ["Strava est relié", "Retourne dans l'app Loopy : tu peux y envoyer tes activités terminées."],
+    refus: ["Accès refusé", "Tu as refusé l'accès à Strava. Tu peux recommencer depuis le profil de l'app."],
+    permission: ["Permission manquante", "Strava n'a pas donné le droit d'envoyer des activités. Recommence en le laissant coché."],
+    erreur: ["Strava n'a pas répondu", "Recommence dans un instant depuis le profil de l'app."] }[s] || ["Strava", ""];
+  document.getElementById("titre").textContent = m[0];
+  document.getElementById("texte").textContent = m[1];
+</script>
+</body>
+</html>

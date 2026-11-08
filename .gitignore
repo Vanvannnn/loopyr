@@ -7,3 +7,5 @@ __pycache__/
 cache/
 elev_cache.json
 *.tmp
+serveur/donnees/
+.env

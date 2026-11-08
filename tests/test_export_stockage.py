@@ -71,3 +71,23 @@ def test_ancien_profil_corrompu_mis_de_cote(tmp_path):
     s = Stockage(str(tmp_path / "activites"), ancien_profil=str(ancien))
     assert s.lister() == []
     assert any(f.name.endswith(".bak") for f in tmp_path.iterdir())
+
+
+def test_gpx_itineraire_sans_heure_ni_performance():
+    from gpx import gpx_itineraire, nom_itineraire
+    coords = [(44.8, -0.63), (44.81, -0.62), (44.8, -0.63)]
+    racine = ET.fromstring(gpx_itineraire(coords, "velo", 10240, 85, [10.0, 20.5, 10.0]))
+    pts = racine.findall("g:trk/g:trkseg/g:trkpt", NS)
+    assert len(pts) == 3 and pts[0].get("lat") == "44.800000"
+    assert pts[1].find("g:ele", NS).text == "20.5"
+    assert racine.find(".//g:time", NS) is None  # un itinéraire n'a pas été parcouru
+    assert racine.find("g:trk/g:type", NS).text == "cycling"
+    assert "10,2 km" in racine.find("g:trk/g:desc", NS).text
+    assert nom_itineraire(10240, "velo") == "boucle_10km_velo.gpx"
+
+
+def test_gpx_activite_velo():
+    act = {**activite(), "sport": "velo"}
+    racine = ET.fromstring(gpx(act))
+    assert racine.find("g:trk/g:type", NS).text == "cycling"
+    assert racine.find("g:trk/g:name", NS).text.startswith("Sortie vélo Loopy")

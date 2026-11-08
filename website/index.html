@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loopy</title>
+<meta name="description" content="Loopy trace autour de ta position une vraie boucle de course à pied ou de vélo, de la distance que tu veux, partout dans le monde.">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/img/app-icon-180.png">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+<style>
+  .hero { padding: clamp(32px, 7vw, 88px) 0 clamp(48px, 8vw, 104px); }
+  .hero .conteneur { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: clamp(24px, 5vw, 72px); align-items: center; }
+  .hero h1 { font-size: clamp(3.4rem, 8.4vw, 7.6rem); line-height: .86; margin-bottom: 28px; }
+  .hero p { font-size: 1.2rem; margin-bottom: 32px; }
+  .demo svg.boucle { width: 100%; height: auto; aspect-ratio: 1; overflow: visible; margin: 20px 0 12px; padding: 4%; }
+  .demo .bas { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+  .demo .compteur { text-align: right; white-space: nowrap; }
+  .demo .compteur .chiffre { font-size: clamp(3.6rem, 9vw, 7rem); line-height: .8; }
+  .demo .compteur .unite { font-family: var(--chiffres); font-weight: 600; font-size: clamp(1.4rem, 3vw, 2.2rem); margin-left: 4px; }
+  .demo .source { font-size: .9rem; color: var(--brume); max-width: 26ch; }
+  @media (max-width: 860px) { .hero .conteneur { grid-template-columns: 1fr; } .demo { max-width: 520px; } }
+
+  section.bloc { padding: clamp(56px, 9vw, 112px) 0; }
+  section.bloc + section.bloc { border-top: 1px solid var(--fond-3); }
+  .bloc h2 { margin-bottom: 20px; max-width: 16ch; }
+  .bloc .intro { font-size: 1.15rem; margin-bottom: 48px; }
+
+  /* comment ça marche : des bornes kilométriques le long d'un tracé */
+  .bornes { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px; list-style: none; padding: 0; margin: 0; counter-reset: km; }
+  .bornes::before { content: ""; position: absolute; left: 24px; right: 24px; top: 30px; height: 4px; border-radius: 2px; background: var(--route); }
+  .bornes .avance { position: absolute; left: 24px; top: 30px; height: 4px; border-radius: 2px; background: var(--trace); width: 0; transition: width 2.4s cubic-bezier(.65,0,.35,1); }
+  .bornes.vu .avance { width: calc(100% - 48px); }
+  .bornes li { position: relative; padding-top: 0; }
+  .borne { width: 48px; height: 64px; border-radius: 24px 24px 6px 6px; background: var(--fond); border: 3px solid var(--encre);
+    display: grid; place-items: center; font: 800 1.5rem/1 var(--chiffres); margin-bottom: 18px; position: relative; z-index: 1; }
+  .borne::before { content: ""; position: absolute; top: -3px; left: -3px; right: -3px; height: 22px; border-radius: 24px 24px 0 0; background: var(--encre); }
+  .borne span { position: relative; top: 7px; }
+  .bornes li:first-child .borne { border-color: var(--sur-peche); background: var(--peche); color: var(--sur-peche); }
+  .bornes li:first-child .borne::before { background: var(--sur-peche); }
+  .bornes h3 { font-size: 1.45rem; margin-bottom: 8px; }
+  .bornes p { font-size: 1rem; color: var(--brume); }
+  @media (max-width: 960px) {
+    .bornes { grid-template-columns: 1fr; gap: 28px; }
+    .bornes::before, .bornes .avance { left: 22px; right: auto; top: 32px; bottom: 32px; width: 4px; height: auto; }
+    .bornes .avance { height: 0; transition-property: height; }
+    .bornes.vu .avance { width: 4px; height: calc(100% - 64px); }
+    .bornes li { display: grid; grid-template-columns: 48px 1fr; gap: 20px; }
+    .borne { margin: 0; }
+  }
+
+  /* deux sports, deux moteurs */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(24px, 4vw, 56px); }
+  .duo > div { border-top: 4px solid var(--encre); padding-top: 24px; }
+  .duo h3 { display: flex; align-items: center; gap: 12px; font-size: 2.2rem; margin-bottom: 14px; }
+  .duo h3 svg { width: 34px; height: 34px; }
+  .duo ul { padding-left: 1.1em; margin: 14px 0 0; }
+  .duo li { margin-bottom: 6px; }
+  .duo .non { color: var(--brume); }
+  @media (max-width: 760px) { .duo { grid-template-columns: 1fr; } }
+
+  /* exemples réels */
+  .exemples { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px 32px; }
+  .exemple svg { width: 100%; aspect-ratio: 1; background: var(--fond-2); border-radius: var(--r); padding: 14%; overflow: visible; }
+  .exemple .titre { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 10px; gap: 12px; }
+  .exemple .titre .chiffre { font-size: 2rem; }
+  @media (max-width: 860px) { .exemples { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 520px) { .exemples { grid-template-columns: 1fr; } }
+
+  /* les deux exports */
+  .exports pre { background: var(--fond-2); border-radius: var(--r-petit); padding: 16px; overflow-x: auto; font-size: .82rem; line-height: 1.5; margin: 18px 0 0; }
+  .exports code b { color: var(--trace); }
+  .pile { display: grid; gap: 18px; margin-top: 8px; }
+  .fin { text-align: left; }
+  .fin h2 { font-size: clamp(3rem, 8vw, 6rem); max-width: 14ch; margin-bottom: 28px; }
+</style>
+</head>
+<body>
+<header class="entete">
+  <div class="conteneur">
+    <a class="marque" href="/" aria-label="Loopy, accueil">
+      <img class="clair" src="/assets/img/loopy-horizontal-couleur-clair.svg" alt="Loopy" width="69" height="34">
+      <img class="sombre" src="/assets/img/loopy-horizontal-sombre.svg" alt="Loopy" width="69" height="34">
+    </a>
+    <nav class="nav" aria-label="Principale">
+      <a href="/creer.html">Créer une boucle</a>
+      <a class="large" href="/communaute.html">Communauté</a>
+      <a href="/connexion.html" data-compte>Se connecter</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="conteneur">
+      <div>
+        <h1>La boucle part de toi.</h1>
+        <p>Dis à Loopy si tu cours ou si tu roules, et combien de kilomètres. Il trace autour de ta position une vraie boucle qui revient à ton point de départ, partout où OpenStreetMap connaît des routes et des chemins.</p>
+        <div class="rangee">
+          <a class="bouton" href="/creer.html">Créer une boucle</a>
+          <a class="bouton second" href="/inscription.html">Créer un compte</a>
+        </div>
+      </div>
+      <div class="demo" id="demo">
+        <div class="segmente" role="group" aria-label="Exemple à afficher">
+          <button type="button" data-sport="course" aria-pressed="true">Course</button>
+          <button type="button" data-sport="velo" aria-pressed="false">Vélo</button>
+        </div>
+        <svg class="boucle" viewBox="0 0 100 100" aria-hidden="true"></svg>
+        <div class="bas"><p class="source" id="source"></p>
+          <div class="compteur"><span class="chiffre" id="compteur">0,0</span><span class="unite">km</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bloc" id="comment">
+    <div class="conteneur">
+      <h2>De ta porte à ta porte, en six étapes</h2>
+      <p class="intro doux">Rien à préparer : la carte se charge autour de toi, à la taille de la sortie que tu demandes.</p>
+      <ol class="bornes" id="bornes">
+        <li><div class="borne" aria-hidden="true"><span>1</span></div><div><h3>Vélo ou course</h3><p>Deux moteurs différents : on ne cherche pas les mêmes chemins pour rouler et pour courir.</p></div></li>
+        <li><div class="borne" aria-hidden="true"><span>2</span></div><div><h3>Ta distance</h3><p>5 km ou 120 km, au kilomètre près ou à la virgule : c'est toi qui choisis.</p></div></li>
+        <li><div class="borne" aria-hidden="true"><span>3</span></div><div><h3>Ta position</h3><p>Le GPS place le départ là où tu es. Tu peux aussi le poser sur la carte.</p></div></li>
+        <li><div class="borne" aria-hidden="true"><span>4</span></div><div><h3>Des boucles</h3><p>Plusieurs directions explorées, la zone de recherche agrandie selon la distance, et les meilleures boucles proposées.</p></div></li>
+        <li><div class="borne" aria-hidden="true"><span>5</span></div><div><h3>Ton GPX</h3><p>Le tracé prévu, pour ta montre, ton GPS ou Strava.</p></div></li>
+        <li><div class="borne" aria-hidden="true"><span>6</span></div><div><h3>Ta sortie</h3><p>L'app enregistre ce que tu fais vraiment. Tu le retrouves, tu l'envoies sur Strava, tu le partages.</p></div></li>
+        <li class="avance" aria-hidden="true"></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="bloc">
+    <div class="conteneur">
+      <h2>Rouler et courir ne se font pas sur les mêmes chemins</h2>
+      <p class="intro doux">Chaque sport a son profil de calcul, écrit pour Loopy. Il lit les vraies informations d'OpenStreetMap : type de voie, revêtement, accès, sens de circulation.</p>
+      <div class="duo">
+        <div>
+          <h3><span data-icone="velo"></span>À vélo</h3>
+          <p>Pensé pour le vélo de route.</p>
+          <ul>
+            <li>Pistes cyclables et voies vertes revêtues</li>
+            <li>Routes asphaltées, routes secondaires calmes</li>
+            <li>Grands axes évités quand une autre route existe</li>
+            <li class="non">Pas de chemins de terre, de sable, d'escaliers ni de bacs</li>
+            <li class="non">Un chemin sans revêtement connu n'est jamais supposé goudronné</li>
+          </ul>
+        </div>
+        <div>
+          <h3><span data-icone="course"></span>En courant</h3>
+          <p>Pensé pour courir agréablement, pas seulement court.</p>
+          <ul>
+            <li>Parcs, promenades, chemins et voies piétonnes</li>
+            <li>Bois et bords d'eau quand il y en a</li>
+            <li>Grandes routes seulement avec un trottoir</li>
+            <li class="non">Jamais d'autoroute, de voie interdite aux piétons ni d'accès privé</li>
+            <li class="non">Escaliers évités quand il y a une autre solution</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bloc">
+    <div class="conteneur">
+      <h2>Partout, depuis là où tu es</h2>
+      <p class="intro doux">Aucune zone n'est fixée à l'avance. Ces boucles ont été générées par le moteur de Loopy, avec leurs vraies distances et la part de revêtement réellement connue.</p>
+      <div class="exemples" id="exemples"></div>
+    </div>
+  </section>
+
+  <section class="bloc exports">
+    <div class="conteneur">
+      <h2>Ce que tu prévois, ce que tu fais</h2>
+      <p class="intro doux">Deux fichiers différents, jamais confondus. Une boucle générée n'est pas une sortie : Loopy n'invente aucune durée ni aucune vitesse.</p>
+      <div class="duo">
+        <div>
+          <h3>L'itinéraire</h3>
+          <p>Dès qu'une boucle est prête : le tracé seul, à importer dans une montre, un GPS ou Strava pour le suivre.</p>
+          <pre><code>&lt;trkpt lat="48.853012" lon="2.349876"&gt;
+  &lt;ele&gt;34.0&lt;/ele&gt;
+&lt;/trkpt&gt;</code></pre>
+        </div>
+        <div>
+          <h3>L'activité</h3>
+          <p>Après ta sortie, enregistrée par le GPS de l'app : chaque point a son heure. Elle part sur Strava en un geste, une fois ton compte relié.</p>
+          <pre><code>&lt;trkpt lat="48.853012" lon="2.349876"&gt;
+  &lt;ele&gt;34.0&lt;/ele&gt;<b>&lt;time&gt;2026-11-08T08:14:05Z&lt;/time&gt;</b>
+&lt;/trkpt&gt;</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bloc">
+    <div class="conteneur duo">
+      <div>
+        <h3>Ton profil, ton historique</h3>
+        <p>Tes boucles enregistrées et favorites, tes sorties avec leur distance, leur durée, ton allure ou ta vitesse et ton dénivelé, et tes kilomètres semaine après semaine.</p>
+      </div>
+      <div>
+        <h3>Une communauté, à ton rythme</h3>
+        <p>Suis d'autres sportifs, partage tes boucles, réagis à leurs sorties. Pour chaque activité, tu choisis qui la voit : tout le monde, tes abonnés ou toi seul. Les 300 premiers et derniers mètres de tes tracés sont masqués aux autres, pour que ta porte reste la tienne.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="bloc fin">
+    <div class="conteneur">
+      <h2>Ta prochaine boucle commence ici.</h2>
+      <div class="rangee">
+        <a class="bouton signal" href="/creer.html">Créer une boucle</a>
+        <a class="bouton second" href="/connexion.html">Se connecter</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="pied">
+  <div class="conteneur">
+    <p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> (ODbL). Itinéraires calculés avec <a href="https://brouter.de">BRouter</a>.</p>
+    <nav aria-label="Pied de page"><a href="/creer.html">Créer une boucle</a><a href="/communaute.html">Communauté</a><a href="/inscription.html">Créer un compte</a></nav>
+  </div>
+</footer>
+
+<script type="module">
+import { ICONES, km, mouvementReduit, barre, VOIES } from "/assets/js/commun.js";
+
+document.querySelectorAll("[data-icone]").forEach((e) => { e.innerHTML = ICONES[e.dataset.icone]; });
+
+// projette une boucle (lat, lon) dans un carré 0-100, en gardant les proportions
+function chemin(coords) {
+  const k = Math.cos(coords[0][0] * Math.PI / 180);
+  const pts = coords.map(([la, lo]) => [lo * k, -la]);
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const x0 = Math.min(...xs), y0 = Math.min(...ys), t = Math.max(Math.max(...xs) - x0, Math.max(...ys) - y0) || 1;
+  const dx = (t - (Math.max(...xs) - x0)) / 2, dy = (t - (Math.max(...ys) - y0)) / 2;
+  const p = pts.map(([x, y]) => [((x - x0 + dx) / t * 100).toFixed(2), ((y - y0 + dy) / t * 100).toFixed(2)]);
+  return { d: "M" + p.map((q) => q.join(" ")).join("L"), depart: p[0] };
+}
+
+function dessiner(svg, ex, epaisseur) {
+  const { d, depart } = chemin(ex.coords);
+  svg.innerHTML = `<path d="${d}" fill="none" stroke="var(--trace)" stroke-width="${epaisseur}" stroke-linejoin="round" stroke-linecap="round" pathLength="1"/>
+    <circle cx="${depart[0]}" cy="${depart[1]}" r="3.4" fill="var(--sur-peche)"/><circle cx="${depart[0]}" cy="${depart[1]}" r="2.4" fill="var(--peche)"/>`;
+  return svg.querySelector("path");
+}
+
+const rep = await fetch("/assets/exemples.json").then((r) => r.json()).catch(() => ({ exemples: [] }));
+const exs = rep.exemples || [];
+const nomSport = { course: "course à pied", velo: "vélo" };
+
+// --- le haut de page : une vraie boucle se trace depuis le point de départ ---
+const svg = document.querySelector("#demo svg"), compteur = document.getElementById("compteur"), source = document.getElementById("source");
+let anim;
+function montrer(sport) {
+  const ex = exs.find((e) => e.sport === sport);
+  if (!ex) return;
+  document.querySelectorAll("#demo [data-sport]").forEach((b) => b.setAttribute("aria-pressed", b.dataset.sport === sport));
+  const p = dessiner(svg, ex, 1.1);
+  source.textContent = `Boucle réelle générée par Loopy : ${ex.ville}, ${nomSport[sport]}, ${km(ex.distance)} km, ${ex.montee} m de D+.`;
+  cancelAnimationFrame(anim);
+  if (mouvementReduit) { compteur.textContent = km(ex.distance); return; }
+  p.style.strokeDasharray = "1"; p.style.strokeDashoffset = "1";
+  const t0 = performance.now(), d = 2200;
+  const pas = (t) => {
+    const x = Math.min(1, (t - t0) / d), e = x < .5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2;
+    p.style.strokeDashoffset = String(1 - e);
+    compteur.textContent = km(ex.distance * e);
+    if (x < 1) anim = requestAnimationFrame(pas);
+  };
+  anim = requestAnimationFrame(pas);
+}
+document.querySelectorAll("#demo [data-sport]").forEach((b) => b.addEventListener("click", () => montrer(b.dataset.sport)));
+montrer("course");
+
+// --- exemples ---
+document.getElementById("exemples").innerHTML = exs.map((ex, i) => `
+  <figure class="exemple" style="margin:0">
+    <svg viewBox="0 0 100 100" aria-label="Tracé de la boucle de ${ex.ville}" role="img" data-i="${i}"></svg>
+    <figcaption>
+      <div class="titre"><strong>${ex.ville}, ${nomSport[ex.sport]}</strong><span class="chiffre">${km(ex.distance)} km</span></div>
+      ${barre(ex.voies, VOIES)}
+      <p class="petit doux" style="margin-top:8px">${ex.montee} m de D+, revêtement connu sur ${Math.round(ex.surface_connue * 100)} % du tracé</p>
+    </figcaption>
+  </figure>`).join("");
+document.querySelectorAll("#exemples svg").forEach((s) => dessiner(s, exs[+s.dataset.i], 1.4));
+
+// --- les bornes : le tracé avance une fois, quand on arrive dessus ---
+const bornes = document.getElementById("bornes");
+if (mouvementReduit || !("IntersectionObserver" in window)) bornes.classList.add("vu");
+else new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { bornes.classList.add("vu"); o.disconnect(); } }, { threshold: .4 }).observe(bornes);
+</script>
+</body>
+</html>

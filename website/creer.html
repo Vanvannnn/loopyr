@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Créer une boucle</title>
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+<style>
+  .atelier { display: grid; grid-template-columns: minmax(320px, 400px) 1fr; min-height: calc(100vh - 65px); }
+  .panneau { padding: 28px var(--gouttiere) 40px; border-right: 1px solid var(--fond-3); overflow-y: auto; }
+  .panneau h1 { font-size: 2.8rem; margin-bottom: 24px; }
+  .etape { margin-bottom: 30px; }
+  .etape > h2 { font-size: 1.6rem; font-weight: 600; margin-bottom: 12px; }
+  .sports { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sport { text-align: left; border: 2px solid var(--fond-3); background: var(--fond); color: var(--encre); border-radius: var(--r);
+    padding: 16px; cursor: pointer; font: inherit; }
+  .sport svg { width: 34px; height: 34px; margin-bottom: 10px; }
+  .sport strong { display: block; font: 800 1.6rem/1 var(--chiffres); margin-bottom: 6px; }
+  .sport span { font-size: .9rem; color: var(--brume); display: block; line-height: 1.35; }
+  .sport[aria-pressed="true"] { border-color: var(--encre); box-shadow: inset 0 0 0 1px var(--encre); background: var(--fond-2); }
+  .distance { display: flex; align-items: stretch; gap: 8px; }
+  .distance button { width: 52px; flex-shrink: 0; font: 800 1.6rem/1 var(--chiffres); border: 2px solid var(--fond-3); background: var(--fond);
+    color: var(--encre); border-radius: var(--r-petit); cursor: pointer; }
+  .distance input { font: 800 2.2rem/1 var(--chiffres); text-align: center; }
+  .puces { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .puces button { border: 2px solid var(--fond-3); background: transparent; color: var(--encre); border-radius: 22px;
+    min-height: 40px; padding: 0 14px; font: 700 .95rem var(--texte); cursor: pointer; }
+  .puces button[aria-pressed="true"] { border-color: var(--encre); background: var(--encre); color: var(--fond); }
+  .cartezone { position: relative; }
+  .cartezone .carte { position: absolute; inset: 0; border-radius: 0; }
+  .consigne { position: absolute; z-index: 500; left: 50%; top: 16px; transform: translateX(-50%); background: var(--encre); color: var(--fond);
+    padding: 10px 16px; border-radius: var(--r); font-weight: 700; max-width: calc(100% - 32px); }
+  .props { display: grid; gap: 10px; margin: 14px 0 18px; }
+  .prop { text-align: left; border: 2px solid var(--fond-3); background: var(--fond); color: var(--encre); border-radius: var(--r);
+    padding: 12px 14px; cursor: pointer; font: inherit; display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; align-items: baseline; }
+  .prop .chiffre { font-size: 2rem; grid-row: span 2; }
+  .prop[aria-pressed="true"] { border-color: var(--trace); box-shadow: inset 0 0 0 1px var(--trace); }
+  .details dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 14px; }
+  .details dt { color: var(--brume); } .details dd { margin: 0; font-weight: 700; }
+  .details h3 { font-size: 1.2rem; margin: 18px 0 8px; }
+  .chargement { display: flex; align-items: center; gap: 12px; }
+  .chargement::before { content: ""; width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--fond-3); border-top-color: var(--trace);
+    animation: tourne .8s linear infinite; }
+  @keyframes tourne { to { transform: rotate(1turn); } }
+  .recherche { display: flex; gap: 8px; margin-top: 10px; }
+  .lieux { list-style: none; padding: 0; margin: 8px 0 0; }
+  .lieux button { background: none; border: 0; color: var(--encre); text-align: left; padding: 8px 0; cursor: pointer; font: inherit; text-decoration: underline; }
+  @media (max-width: 860px) {
+    .atelier { grid-template-columns: 1fr; }
+    .panneau { border-right: 0; order: 2; }
+    .cartezone { order: 1; height: 52vh; position: sticky; top: 65px; z-index: 1; }
+  }
+</style>
+</head>
+<body>
+<header class="entete">
+  <div class="conteneur">
+    <a class="marque" href="/" aria-label="Loopy, accueil">
+      <img class="clair" src="/assets/img/loopy-horizontal-couleur-clair.svg" alt="Loopy" width="69" height="34">
+      <img class="sombre" src="/assets/img/loopy-horizontal-sombre.svg" alt="Loopy" width="69" height="34">
+    </a>
+    <nav class="nav" aria-label="Principale">
+      <a href="/creer.html" aria-current="page">Créer une boucle</a>
+      <a class="large" href="/communaute.html">Communauté</a>
+      <a href="/connexion.html" data-compte>Se connecter</a>
+    </nav>
+  </div>
+</header>
+<main class="atelier">
+  <div class="panneau">
+    <h1>Créer une boucle</h1>
+    <section class="etape" aria-labelledby="t-sport">
+      <h2 id="t-sport">Tu pars comment ?</h2>
+      <div class="sports">
+        <button type="button" class="sport" data-sport="velo" aria-pressed="false"><span data-icone="velo"></span><strong>Je pars à vélo</strong>
+          <span>Routes revêtues et pistes cyclables, pour les distances plus longues.</span></button>
+        <button type="button" class="sport" data-sport="course" aria-pressed="false"><span data-icone="course"></span><strong>Je pars courir</strong>
+          <span>Chemins piétons, parcs et espaces agréables pour courir.</span></button>
+      </div>
+    </section>
+
+    <section class="etape" id="e-distance" aria-labelledby="t-distance" hidden>
+      <h2 id="t-distance">Quelle distance souhaites-tu parcourir ?</h2>
+      <div class="distance">
+        <button type="button" id="moins" aria-label="Un kilomètre de moins">−</button>
+        <label class="cache" for="km">Distance en kilomètres</label>
+        <input id="km" type="number" inputmode="decimal" step="0.5">
+        <button type="button" id="plus" aria-label="Un kilomètre de plus">+</button>
+      </div>
+      <p class="aide" id="km-aide"></p>
+      <div class="puces" id="suggestions" role="group" aria-label="Distances suggérées"></div>
+      <h2 style="font-size:1.2rem;margin:22px 0 10px">Relief</h2>
+      <div class="segmente" role="group" aria-label="Relief" id="relief">
+        <button type="button" data-v="" aria-pressed="true">Peu importe</button>
+        <button type="button" data-v="plat" aria-pressed="false">Plutôt plat</button>
+        <button type="button" data-v="vallonne" aria-pressed="false">Vallonné</button>
+      </div>
+    </section>
+
+    <section class="etape" id="e-depart" aria-labelledby="t-depart" hidden>
+      <h2 id="t-depart">D'où pars-tu ?</h2>
+      <div class="rangee">
+        <button type="button" class="bouton second petit" id="ma-position">Utiliser ma position</button>
+        <button type="button" class="bouton discret petit" id="sur-carte">Choisir sur la carte</button>
+      </div>
+      <p class="aide" id="etat-depart" aria-live="polite">Le départ sera ta position actuelle.</p>
+      <form class="recherche" id="form-lieu" role="search">
+        <label class="cache" for="lieu">Chercher une ville ou une adresse</label>
+        <input id="lieu" type="search" placeholder="Ou cherche une ville, une adresse" autocomplete="off">
+        <button class="bouton second petit" type="submit">Chercher</button>
+      </form>
+      <ul class="lieux" id="lieux"></ul>
+      <div class="rangee" style="margin-top:20px"><button type="button" class="bouton signal" id="generer">Générer mes boucles</button></div>
+    </section>
+
+    <section class="etape" id="e-resultat" aria-live="polite" hidden></section>
+  </div>
+  <div class="cartezone">
+    <div class="carte" id="carte" role="region" aria-label="Carte"></div>
+    <p class="consigne" id="consigne" hidden>Touche la carte pour placer ton départ</p>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+import { api, moi, SPORTS, ICONES, km, barre, VOIES, REVETEMENTS, gpxItineraire, nomItineraire, telecharger, toast, echapper } from "/assets/js/commun.js";
+import { carte, boucle, depart as pointDepart, cadrer } from "/assets/js/carte.js";
+const L = window.L, $ = (s) => document.querySelector(s);
+document.querySelectorAll("[data-icone]").forEach((e) => { e.innerHTML = ICONES[e.dataset.icone]; });
+
+const etat = { sport: null, relief: "", depart: null, choisir: false, res: null, choix: 0, calques: [] };
+const m = carte("carte");
+let marqueur = null, zone = null;
+
+// --- 1. le sport ---
+document.querySelectorAll(".sport").forEach((b) => b.addEventListener("click", () => {
+  etat.sport = b.dataset.sport;
+  document.querySelectorAll(".sport").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  const s = SPORTS[etat.sport];
+  $("#km").min = s.mini; $("#km").max = s.maxi; $("#km").value = s.defaut;
+  $("#km-aide").textContent = `De ${s.mini} à ${s.maxi} km. Les suggestions ne sont pas des limites.`;
+  $("#suggestions").innerHTML = s.suggestions.map((v) => `<button type="button" data-km="${v}">${v} km</button>`).join("");
+  majPuces();
+  $("#e-distance").hidden = $("#e-depart").hidden = false;
+  if (!etat.depart) localiser(false);
+}));
+const distance = () => parseFloat(String($("#km").value).replace(",", "."));
+function majPuces() { document.querySelectorAll("#suggestions button").forEach((b) => b.setAttribute("aria-pressed", +b.dataset.km === distance())); }
+$("#suggestions").addEventListener("click", (e) => { if (e.target.dataset.km) { $("#km").value = e.target.dataset.km; majPuces(); } });
+$("#km").addEventListener("input", majPuces);
+for (const [id, pas] of [["#moins", -1], ["#plus", 1]]) $(id).addEventListener("click", () => {
+  const s = SPORTS[etat.sport];
+  $("#km").value = Math.min(s.maxi, Math.max(s.mini, Math.round((distance() || s.defaut) + pas)));
+  majPuces();
+});
+$("#relief").addEventListener("click", (e) => {
+  if (e.target.dataset.v === undefined) return;
+  etat.relief = e.target.dataset.v;
+  document.querySelectorAll("#relief button").forEach((b) => b.setAttribute("aria-pressed", b === e.target));
+});
+
+// --- 2. le départ : GPS, point sur la carte, ou recherche ---
+function placer(p, texte) {
+  etat.depart = p;
+  if (marqueur) marqueur.remove();
+  marqueur = pointDepart(m, p);
+  m.setView(p, Math.max(m.getZoom(), 14));
+  $("#etat-depart").textContent = texte;
+}
+function localiser(insister = true) {
+  if (!window.isSecureContext) { $("#etat-depart").textContent = "La localisation demande une connexion sécurisée (HTTPS) : choisis ton départ sur la carte ou cherche un lieu."; return; }
+  if (!navigator.geolocation) { $("#etat-depart").textContent = "Ce navigateur ne donne pas ta position : choisis ton départ sur la carte ou cherche un lieu."; return; }
+  $("#etat-depart").textContent = "Recherche de ta position…";
+  navigator.geolocation.getCurrentPosition(
+    (pos) => placer([pos.coords.latitude, pos.coords.longitude], `Départ : ta position (à ${Math.round(pos.coords.accuracy)} m près).`),
+    (err) => {
+      $("#etat-depart").textContent = {
+        1: "Tu as refusé l'accès à ta position. Autorise-le dans les réglages du navigateur, ou choisis ton départ sur la carte.",
+        2: "Position introuvable pour l'instant. Réessaie dehors, ou choisis ton départ sur la carte.",
+        3: "La position met trop de temps à arriver. Réessaie, ou choisis ton départ sur la carte.",
+      }[err.code] || "Position indisponible.";
+      if (insister) toast("Position indisponible");
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
+$("#ma-position").addEventListener("click", () => localiser(true));
+$("#sur-carte").addEventListener("click", () => { etat.choisir = true; $("#consigne").hidden = false; });
+m.on("click", (e) => {
+  if (!etat.choisir) return;
+  etat.choisir = false; $("#consigne").hidden = true;
+  placer([e.latlng.lat, e.latlng.lng], "Départ : le point choisi sur la carte.");
+});
+$("#form-lieu").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const q = $("#lieu").value.trim();
+  if (q.length < 2) return;
+  $("#lieux").innerHTML = "<li class='doux'>Recherche…</li>";
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`, { headers: { "Accept-Language": "fr" } }).then((x) => x.json());
+    $("#lieux").innerHTML = r.length ? r.map((x, i) => `<li><button type="button" data-i="${i}">${echapper(x.display_name)}</button></li>`).join("") : "<li class='doux'>Aucun lieu trouvé.</li>";
+    $("#lieux").onclick = (ev) => { const x = r[ev.target.dataset.i]; if (x) { placer([+x.lat, +x.lon], `Départ : ${x.display_name.split(",")[0]}.`); $("#lieux").innerHTML = ""; } };
+  } catch { $("#lieux").innerHTML = "<li class='erreur'>Recherche impossible pour l'instant.</li>"; }
+});
+
+// --- 3. la génération ---
+$("#generer").addEventListener("click", async () => {
+  const s = SPORTS[etat.sport], d = distance();
+  const res = $("#e-resultat");
+  res.hidden = false;
+  if (!(d >= s.mini && d <= s.maxi)) { res.innerHTML = `<p class="message erreur">Choisis une distance entre ${s.mini} et ${s.maxi} km.</p>`; return; }
+  if (!etat.depart) { res.innerHTML = `<p class="message erreur">Il faut un point de départ : ta position, un point sur la carte ou un lieu cherché.</p>`; return; }
+  $("#generer").disabled = true;
+  res.innerHTML = `<p class="chargement">Recherche de boucles de ${km(d * 1000)} km autour de ton départ…</p>`;
+  try {
+    etat.res = await api("/api/boucles", { methode: "POST", corps: { sport: etat.sport, distance_km: d, lat: etat.depart[0], lon: etat.depart[1], relief: etat.relief || null } });
+    etat.choix = 0;
+    afficher();
+  } catch (err) {
+    res.innerHTML = `<p class="message erreur">${echapper(err.message)}</p>`;
+  } finally { $("#generer").disabled = false; }
+});
+
+function afficher() {
+  const r = etat.res, res = $("#e-resultat");
+  etat.calques.forEach((c) => c.remove()); etat.calques = [];
+  if (zone) zone.remove();
+  zone = L.circle(r.depart, { radius: r.zone.rayon, color: getComputedStyle(document.documentElement).getPropertyValue("--brume"), weight: 1.5, dashArray: "6 8", fill: false }).addTo(m);
+  if (!r.propositions.length) { res.innerHTML = `<p class="message erreur">${echapper(r.message)}</p>`; return; }
+  r.propositions.forEach((p, i) => { if (i !== etat.choix) etat.calques.push(boucle(m, p.coords, { pale: true, epaisseur: 4 })); });
+  const p = r.propositions[etat.choix];
+  etat.calques.push(boucle(m, p.coords));
+  marqueur.bringToFront();
+  cadrer(m, p.coords);
+  const ecart = Math.round((p.distance - r.cible) / r.cible * 100);
+  const rv = p.resume_voies;
+  res.innerHTML = `
+    <h2>${r.propositions.length > 1 ? `${r.propositions.length} boucles trouvées` : "Une boucle trouvée"}</h2>
+    ${r.message ? `<p class="message">${echapper(r.message)}</p>` : ""}
+    <div class="props" role="group" aria-label="Choisir une boucle">${r.propositions.map((q, i) => `
+      <button type="button" class="prop" data-i="${i}" aria-pressed="${i === etat.choix}"><span class="chiffre">${km(q.distance)} km</span>
+        <strong>Boucle ${String.fromCharCode(65 + i)}</strong><span class="doux petit">${Math.round(q.montee)} m de D+, ${Math.round(q.qualite * 100)} % sur des voies adaptées</span></button>`).join("")}</div>
+    <div class="details">
+      <dl>
+        <dt>Distance demandée</dt><dd>${km(r.cible)} km</dd>
+        <dt>Distance réelle</dt><dd>${km(p.distance, 2)} km (${ecart >= 0 ? "+" : ""}${ecart} %)</dd>
+        <dt>Dénivelé positif</dt><dd>${Math.round(p.montee)} m</dd>
+        <dt>Zone explorée</dt><dd>${km(r.zone.rayon)} km autour du départ</dd>
+        <dt>Portions en double</dt><dd>${Math.round(p.recouvrement * 100)} %</dd>
+      </dl>
+      <h3>Types de voies</h3>${barre(rv.voies, VOIES)}
+      <h3>Revêtement</h3>${barre(rv.revetement, REVETEMENTS)}
+      <p class="aide">Revêtement indiqué dans OpenStreetMap sur ${Math.round(rv.surface_connue * 100)} % du tracé, déduit du type de route sur ${Math.round(rv.surface_deduite * 100)} %, inconnu ailleurs.</p>
+    </div>
+    <div class="rangee" style="margin-top:22px">
+      <button type="button" class="bouton" id="gpx">Télécharger l'itinéraire GPX</button>
+      <button type="button" class="bouton second" id="garder">Enregistrer</button>
+      <button type="button" class="bouton discret" id="autre">Régénérer</button>
+    </div>
+    <p class="aide">Le GPX contient le tracé prévu, sans durée ni vitesse. L'activité que tu feras s'enregistre avec l'app Loopy.</p>`;
+  res.querySelectorAll(".prop").forEach((b) => b.addEventListener("click", () => { etat.choix = +b.dataset.i; afficher(); }));
+  $("#gpx").addEventListener("click", () => telecharger(nomItineraire(p.distance, r.sport), gpxItineraire(p.coords, r.sport, p.distance, p.montee, p.ele)));
+  $("#autre").addEventListener("click", () => $("#generer").click());
+  $("#garder").addEventListener("click", async () => {
+    if (!(await moi())) { location.href = "/connexion.html?suite=/creer.html"; return; }
+    try {
+      await api("/api/itineraires", { methode: "POST", corps: { nom: `Boucle ${km(p.distance)} km (${SPORTS[r.sport].court})`, sport: r.sport,
+        distance: p.distance, montee: p.montee, coords: p.coords, ele: p.ele, resume_voies: p.resume_voies } });
+      toast("Boucle enregistrée dans ton espace");
+      $("#garder").disabled = true; $("#garder").textContent = "Enregistrée";
+    } catch (err) { toast(err.message); }
+  });
+}
+
+// arrivée depuis l'app ou un lien : ?sport=velo
+const demande = new URLSearchParams(location.search).get("sport");
+if (SPORTS[demande]) document.querySelector(`.sport[data-sport="${demande}"]`).click();
+</script>
+</body>
+</html>

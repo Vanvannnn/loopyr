@@ -17,7 +17,7 @@ from kivy.utils import platform
 from annonces import Annonceur
 from capteurs.voix import Voix
 from course import fmt_allure
-from geo import Cap, ecart
+from geo import Altitudes, Cap, ecart
 from journal import appliquer
 from progression import Progression
 from ui.carte import Trace, avec_zoom
@@ -177,6 +177,9 @@ class EcranCourse(Screen):
     def afficher_boucle(self, res):
         self.res, self.fini = res, False
         self.course, self.dernier_evt, self.cap, self.km_vu = None, 0, Cap(), 0
+        self.velo = res.get("sport") == "velo"
+        self.altitude = Altitudes(res["coords"], res.get("ele"))  # altitude d'après la boucle prévue
+        self.legendes[1].text = "vitesse, km/h" if self.velo else "allure, min/km"
         self.prog = Progression(res["coords"])
         self.trace.coords = res["coords"]
         self.trace.fait, self.trace.boucle_faite, self.trace.moi = [], [], []
@@ -218,7 +221,7 @@ class EcranCourse(Screen):
         dernier_point = None
         for e in self.journal.lire(apres=self.dernier_evt):
             self.dernier_evt = e[0]
-            self.course = appliquer(self.course, e, self.app.carte.altitude if self.app.carte else None)
+            self.course = appliquer(self.course, e, self.altitude)
             if self.annonceur:
                 self.annonceur.traiter(e)
             if e[1] == "point" and self.course and not self.course.en_pause:
@@ -239,8 +242,13 @@ class EcranCourse(Screen):
             self.km_vu = int(c.dist // 1000)
             pulser(self.l_dist, 1.1, 0.6)
         self.l_temps.text = chrono(c.duree())
-        self.l_allure.text = fmt_allure(v)
-        self.l_vitesse.text = f"{nombre(v * 3.6)}{unite('km/h', 15)}"
+        if self.velo:  # à vélo : la vitesse en grand, la moyenne en petit
+            self.l_allure.text = nombre(v * 3.6)
+            moy = c.dist / c.duree() * 3.6 if c.duree() else 0
+            self.l_vitesse.text = f"{nombre(moy)}{unite('km/h moy.', 15)}"
+        else:
+            self.l_allure.text = fmt_allure(v)
+            self.l_vitesse.text = f"{nombre(v * 3.6)}{unite('km/h', 15)}"
         self.l_dplus.text = f"{c.dplus:.0f}{unite('m D+', 15)}"
         if c.en_pause != self.en_pause:
             self.peindre(c.en_pause)
@@ -290,11 +298,14 @@ class EcranCourse(Screen):
 
     def popup_fin(self):
         c = self.course
-        moy = fmt_allure(c.dist / c.duree()) if c.duree() else "--:--"
-        f = Feuille("Course terminée", Window.height * 0.82)
+        if self.velo:
+            moy = f"{nombre(c.dist / c.duree() * 3.6) if c.duree() else '--'} km/h"
+        else:
+            moy = f"{fmt_allure(c.dist / c.duree()) if c.duree() else '--:--'} min/km"
+        f = Feuille("Sortie terminée" if self.velo else "Course terminée", Window.height * 0.82)
         f.ajouter(lab(f"{nombre(c.dist / 1000, 2)}{unite('km', 26)}", 84, gras=True, chiffres=True,
                       size_hint_y=None, height=dp(92)))
-        f.ajouter(lab(f"en {chrono(c.duree())}, {moy} min/km en moyenne, {c.dplus:.0f} m de D+", 17, BRUME,
+        f.ajouter(lab(f"en {chrono(c.duree())}, {moy} en moyenne, {c.dplus:.0f} m de D+", 17, BRUME,
                       size_hint_y=None, height=dp(26)))
         f.ajouter(lab("Tes kilomètres", 16, gras=True, size_hint_y=None, height=dp(30)))
         sv = ScrollView()
@@ -311,8 +322,11 @@ class EcranCourse(Screen):
 
     def fin_course(self, pop, garder):
         pop.fermer()
+        act = None
         if garder and self.course.dist > 0:
-            self.app.stockage.enregistrer(self.course.resume())
+            act = {**self.course.resume(), "sport": "velo" if self.velo else "course", "nom": self.res.get("nom")}
+            self.app.stockage.enregistrer(act)
+            self.app.synchroniser_activite(act)
         self.journal.vider()
         self.course = None
         self.trace.fait, self.trace.boucle_faite = [], []
@@ -323,7 +337,10 @@ class EcranCourse(Screen):
         if self.btn_cap:
             self.btn_cap.text = ORIENTS["marche"]
         Window.allow_screensaver = True
-        self.app.aller("plan", "descendre")
+        if act:  # la sortie qu'on vient d'enregistrer : GPX, Strava, partage
+            self.app.ecran_detail.ouvrir(act["id"], "descendre")
+        else:
+            self.app.aller("plan", "descendre")
 
     # --- après un crash : une course du journal n'est pas terminée ---
     def verifier_reprise(self):
