@@ -31,7 +31,9 @@ def gpx(act, nom=None):
     sport = act.get("sport", "course")
     nom = escape(nom or act.get("nom") or f"{NOMS.get(sport, 'Sortie')} Loopy {act['date']}")
     lignes = ENTETE + [f"  <metadata><name>{nom}</name><time>{heure_iso(act['debut'])}</time></metadata>",
-                       f"  <trk><name>{nom}</name><type>{TYPES.get(sport, 'running')}</type>"]
+                       f"  <trk><name>{nom}</name>" + (f"<desc>{escape(act['description'])}</desc>"
+                                                       if act.get("description") else "") +
+                       f"<type>{TYPES.get(sport, 'running')}</type>"]
     for seg in act["segments"]:  # un segment par période sans pause
         lignes.append("    <trkseg>")
         lignes += [_pt(lat, lon, ele, t) for t, lat, lon, ele in seg]

@@ -92,8 +92,9 @@ def avec_zoom(trace, on_mode=None):
         f.add_widget(Bouton(txt, lambda *_, fac=fac: trace.zoomer(fac), "carte", 56, 28,
                             size_hint=(None, None), width=dp(56), pos_hint={"right": 0.97, **place}))
     if on_mode:
-        f.add_widget(Bouton("Sens de course", on_mode, "carte", 48, 15, size_hint=(None, None),
-                            width=dp(150), pos_hint={"x": 0.03, "top": 0.97}))
+        # en bas à gauche : le haut de la carte est au bandeau de navigation
+        f.add_widget(Bouton("Sens de marche", on_mode, "carte", 48, 15, size_hint=(None, None),
+                            width=dp(150), pos_hint={"x": 0.03, "y": 0.05}))
     f.add_widget(lab("© OpenStreetMap", 11, BRUME, size_hint=(None, None), size=(dp(110), dp(18)),
                      pos_hint={"x": 0.02, "y": 0.005}))
     return f
@@ -107,6 +108,8 @@ class Trace(StencilView):
     fait = ListProperty([])
     boucle_faite = ListProperty([])  # partie de la boucle déjà parcourue (grisée)
     depart = ListProperty([])
+    prochain = ListProperty([])  # (lat, lon) du prochain carrefour (navigation)
+    rejoindre = ListProperty([])  # chemin calculé pour revenir sur la boucle, en pointillés
     centre = ListProperty([])  # vue d'ensemble sans boucle : autour de ce point
     zone = ListProperty([])  # [lat, lon, rayon m] : la zone de recherche, en cercle discret
     suivi = BooleanProperty(False)
@@ -133,7 +136,7 @@ class Trace(StencilView):
         Tuiles.cartes.add(self)
         self.bind(pos=self.dessiner, size=self.dessiner, coords=self.reset, suivi=self.reset, centre=self.reset,
                   moi=self.dessiner, depart=self.dessiner, revele=self.dessiner, autres=self.dessiner,
-                  zone=self.dessiner)
+                  zone=self.dessiner, prochain=self.dessiner, rejoindre=self.dessiner)
 
     # --- projection ---
     def _origine(self, lat, lon):
@@ -175,6 +178,11 @@ class Trace(StencilView):
         if self.suivi and len(self.moi) == 2:
             self.cx, self.cy = self.mondial(*self.moi)
             base = min(self.width, self.height) / (2 * self.rayon)
+            cap = self.cible()
+            if self.cap is not None and self.orient != "nord":  # on voit plus loin devant que derrière
+                avance = 0.32 * min(self.width, self.height) / 2 / (base * self.zoom)
+                self.cx += avance * math.sin(math.radians(cap))
+                self.cy += avance * math.cos(math.radians(cap))
         else:
             if len(self.coords) >= 2:
                 pts = [self.mondial(*p) for p in self.coords]
@@ -267,10 +275,17 @@ class Trace(StencilView):
             n = max(2, int(len(self.coords) * self.revele))
             ligne(self.coords[:n], FOND, 8)  # liseré : la boucle se détache des tuiles
             ligne(self.coords[:n], TRACE, 5)
-        if len(self.boucle_faite) >= 2:
+        if len(self.boucle_faite) >= 2:  # la partie de la boucle déjà faite s'efface…
+            ligne(self.boucle_faite, FOND, 8)
             ligne(self.boucle_faite, TRACE_PALE, 5)
-        if len(self.fait) >= 2:
-            ligne(self.fait, ENCRE, 3)
+        if len(self.fait) >= 2:  # … et ton vrai trajet par-dessus : encre bordée de pêche, distinct du prévu (sauge)
+            ligne(self.fait, SIGNAL, 8)
+            ligne(self.fait, ENCRE, 3.5)
+        if len(self.rejoindre) >= 2:  # le chemin pour revenir sur la boucle, en couleur signal
+            ligne(self.rejoindre, FOND, 8)
+            ligne(self.rejoindre, SIGNAL, 4.5)
+        if len(self.prochain) == 2 and self.suivi:  # le prochain carrefour : un anneau encre
+            disque(self.prochain, ((13, FOND), (10, ENCRE), (5, FOND)))
         if len(self.coords) >= 2:  # départ et arrivée : le point du logo
             disque(self.coords[0], ((14, FOND), (11, SUR_SIGNAL), (8, SIGNAL)))
         if len(self.depart) == 2 and not self.suivi:
@@ -279,18 +294,20 @@ class Trace(StencilView):
             x, y = self.mondial(*self.moi)
             if self.cap is None:  # pas encore de direction : un point
                 disque(self.moi, ((12, FOND), (10, TRACE), (5, FOND)))
-            else:  # flèche orientée vers la direction de marche
+            else:  # grande flèche orientée vers la direction de marche, lisible en courant
                 sb, cb = math.sin(math.radians(self.cap)), math.cos(math.radians(self.cap))
-                self.g_dyn.add(Color(*TRACE[:3], 0.18))
-                self.g_dyn.add(Ellipse(pos=(x - 30 * u, y - 30 * u), size=(60 * u, 60 * u)))
+                self.g_dyn.add(Color(*TRACE[:3], 0.22))
+                self.g_dyn.add(Ellipse(pos=(x - 54 * u, y - 54 * u), size=(108 * u, 108 * u)))
+                self.g_dyn.add(Color(*FOND))  # pastille claire : la flèche se détache de n'importe quelle tuile
+                self.g_dyn.add(Ellipse(pos=(x - 36 * u, y - 36 * u), size=(72 * u, 72 * u)))
 
                 def pt(a, b, k):
                     return x + (a * cb + b * sb) * k * u, y + (-a * sb + b * cb) * k * u
 
-                for k, c in ((19, SUR_SIGNAL), (14, SIGNAL)):  # contour sombre, flèche signal
+                for k, c in ((32, SUR_SIGNAL), (25, SIGNAL)):  # contour sombre, flèche signal (2 fois l'ancienne)
                     self.g_dyn.add(Color(*c))
-                    self.g_dyn.add(Triangle(points=[*pt(0, 1.5, k), *pt(-1, -1, k), *pt(0, -0.45, k)]))
-                    self.g_dyn.add(Triangle(points=[*pt(0, 1.5, k), *pt(0, -0.45, k), *pt(1, -1, k)]))
+                    self.g_dyn.add(Triangle(points=[*pt(0, 1.3, k), *pt(-0.95, -0.95, k), *pt(0, -0.4, k)]))
+                    self.g_dyn.add(Triangle(points=[*pt(0, 1.3, k), *pt(0, -0.4, k), *pt(0.95, -0.95, k)]))
 
     # --- gestes : pincer pour zoomer, glisser pour déplacer, toucher pour choisir ---
     def on_touch_down(self, t):

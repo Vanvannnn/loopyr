@@ -230,3 +230,16 @@ def test_generation_par_le_serveur(client, monkeypatch):
     p = r.json()["propositions"]
     assert p and "troncons" not in p[0] and p[0]["coords"][0] == [48.85, 2.35]
     assert client.post("/api/boucles", json={"sport": "course", "distance_km": 0.2, "lat": 48.85, "lon": 2.35}).status_code == 422
+
+
+def test_description_et_ressenti_prive(client):
+    """v0.5 : la description se partage, le ressenti reste à son auteur ; les deux se modifient ensuite."""
+    h, h2 = compte(client), compte(client, "bob")
+    corps = {**activite("public"), "nom": "Course du soir", "description": "Jambes lourdes", "ressenti": "dur"}
+    a = client.put("/api/moi/activites/x1", json=corps, headers=h).json()
+    assert a["description"] == "Jambes lourdes" and a["ressenti"] == "dur"
+    vu = client.get(f"/api/activites/{a['id']}", headers=h2).json()
+    assert vu["description"] == "Jambes lourdes" and vu["ressenti"] is None
+    r = client.patch(f"/api/activites/{a['id']}", json={"nom": "Renommée", "ressenti": "bien"}, headers=h)
+    assert r.json()["nom"] == "Renommée" and r.json()["ressenti"] == "bien"
+    assert client.put("/api/moi/activites/x2", json={**corps, "ressenti": "super"}, headers=h).status_code == 422

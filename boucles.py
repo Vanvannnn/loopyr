@@ -85,12 +85,15 @@ class BRouter:
 
     def itineraire(self, points, sport):
         """points : [(lat, lon), …] dans l'ordre. Renvoie coords, ele, distance (m), montee (m),
-        troncons [(longueur m, étiquettes OSM)]."""
+        troncons [(longueur m, étiquettes OSM)] et hints : les consignes [indice du point, commande, sortie de
+        rond-point, distance jusqu'à la suivante, angle] (commandes de BRouter, VoiceHint)."""
         lonlats = "|".join(f"{lon:.6f},{lat:.6f}" for lat, lon in points)
         perime = None
         for essai in range(2):
             pid = self._profil(SPORTS[sport]["profil"], perime)
-            q = urllib.parse.urlencode({"lonlats": lonlats, "profile": pid, "alternativeidx": 0, "format": "geojson"})
+            # timode=2 : consignes de navigation (voicehints) calculées par le moteur sur le vrai réseau
+            q = urllib.parse.urlencode({"lonlats": lonlats, "profile": pid, "alternativeidx": 0, "format": "geojson",
+                                        "timode": 2})
             code, texte = self._http(f"{self.url}?{q}")
             if code == 200 and texte.lstrip().startswith("{"):
                 break
@@ -106,7 +109,9 @@ class BRouter:
         return {"coords": [(round(c[1], 6), round(c[0], 6)) for c in pts],
                 "ele": [c[2] if len(c) > 2 else None for c in pts],
                 "distance": float(p["track-length"]), "montee": float(p.get("filtered ascend") or 0),
-                "troncons": troncons(p.get("messages") or [])}
+                "troncons": troncons(p.get("messages") or []),
+                "hints": [[int(h[0]), int(h[1]), int(h[2]), float(h[3]), float(h[4])]
+                          for h in p.get("voicehints") or () if len(h) >= 5]}
 
 
 def traduire_erreur(texte):
@@ -330,7 +335,7 @@ def recouvrement_entre(a, b):
 def alleger(prop):
     """Ce qu'on garde d'une proposition pour l'enregistrer ou l'envoyer (sans les tronçons bruts)."""
     return {k: prop[k] for k in ("coords", "ele", "distance", "montee", "resume_voies", "qualite", "recouvrement",
-                                 "ecart") if k in prop}
+                                 "ecart", "hints") if k in prop}
 
 
 # --- recherche d'un lieu, si le GPS n'est pas disponible ---
@@ -343,3 +348,19 @@ def chercher_lieu(texte, timeout=15):
             return [(x["display_name"], float(x["lat"]), float(x["lon"])) for x in json.loads(r.read())]
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise ErreurItineraire("Recherche de lieu impossible (pas de connexion ?)") from e
+
+
+def lieu_de(lat, lon, timeout=8):
+    """La commune d'une position (Nominatim, OpenStreetMap), pour nommer une sortie. None si inconnue."""
+    q = urllib.parse.urlencode({"lat": f"{lat:.5f}", "lon": f"{lon:.5f}", "format": "jsonv2", "zoom": 14,
+                                "accept-language": "fr"})
+    req = urllib.request.Request(f"https://nominatim.openstreetmap.org/reverse?{q}", headers={"User-Agent": AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=contexte_ssl()) as r:
+            adresse = json.loads(r.read()).get("address") or {}
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise ErreurItineraire("Lieu inconnu (pas de connexion ?)") from e
+    for cle in ("city", "town", "village", "municipality", "suburb"):
+        if adresse.get(cle):
+            return adresse[cle]
+    return None

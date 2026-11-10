@@ -7,7 +7,7 @@ from geo import haversine
 PRECISION_MAX = 25  # m : position trop imprécise au-delà
 VITESSE_MAX = 12  # m/s : au-delà, c'est un saut du GPS, pas toi
 BRUIT = 2  # m : déplacement ignoré (bruit du GPS à l'arrêt)
-SEUIL_DPLUS = 3  # m : une montée n'est comptée qu'au-delà (altitudes approximatives)
+SEUIL_DPLUS = 3  # m : une montée (ou une descente) n'est comptée qu'au-delà : le bruit des altitudes s'annule
 SAUTS_MAX = 3  # sauts d'affilée : c'est alors le point de référence qui était faux
 
 
@@ -31,10 +31,13 @@ class Course:
         self.fin = None
         self.pauses = []  # [début, fin ou None]
         self.segments = [[]]  # un segment par période sans pause : [(t, lat, lon, ele), ...]
-        self.dist = self.dplus = 0.0
+        self.dist = self.dplus = self.dmoins = 0.0
+        self.alt = self.alt_min = self.alt_max = None  # altitude actuelle, la plus basse, la plus haute
+        self.vmax = 0.0  # vitesse lissée sur 15 s la plus élevée (m/s)
         self.splits = []  # temps en mouvement (s) de chaque km
         self.recent = []  # (t, distance) des 15 dernières secondes, pour la vitesse
-        self._ele_ref, self._sauts = None, 0
+        self._bas, self._haut, self._sauts = None, None, 0
+        self.seuil = SEUIL_DPLUS  # relevé à 5 m quand l'altitude vient du GPS (plus bruitée)
 
     def _t(self, t):
         return self.horloge() if t is None else t
@@ -92,13 +95,15 @@ class Course:
                 if self._sauts <= SAUTS_MAX:
                     return False
                 seg.append((t, lat, lon, ele))  # on repart de ce point, sans compter la distance
-                self._sauts, self._ele_ref = 0, None
+                self._sauts = 0
                 return True
             self._compter(t0, d, t)
         self._sauts = 0
         seg.append((t, lat, lon, ele))
         self._denivele(ele)
         self.recent = [x for x in self.recent if t - x[0] <= 15] + [(t, self.dist)]
+        if self.recent[-1][0] - self.recent[0][0] >= 10:  # assez de recul pour une vitesse qui ne soit pas du bruit
+            self.vmax = max(self.vmax, self.vitesse(t))
         return True
 
     def _compter(self, t0, d, t):
@@ -110,13 +115,23 @@ class Course:
             self.splits.append(self.duree(passage) - sum(self.splits))
 
     def _denivele(self, ele):
+        """D+ et D- avec hystérésis : une montée compte depuis le point le plus bas atteint, dès qu'elle dépasse
+        le seuil (et symétriquement pour la descente). Mis à jour à chaque point : il avance pendant la sortie."""
         if ele is None:
             return
-        if self._ele_ref is None or ele < self._ele_ref:
-            self._ele_ref = ele
-        elif ele - self._ele_ref >= SEUIL_DPLUS:
-            self.dplus += ele - self._ele_ref
-            self._ele_ref = ele
+        self.alt = ele
+        self.alt_min = ele if self.alt_min is None else min(self.alt_min, ele)
+        self.alt_max = ele if self.alt_max is None else max(self.alt_max, ele)
+        if self._bas is None or ele < self._bas:
+            self._bas = ele
+        elif ele - self._bas >= self.seuil:
+            self.dplus += ele - self._bas
+            self._bas = ele
+        if self._haut is None or ele > self._haut:
+            self._haut = ele
+        elif self._haut - ele >= self.seuil:
+            self.dmoins += self._haut - ele
+            self._haut = ele
 
     def vitesse(self, t=None):
         """Vitesse en m/s, lissée sur les 15 dernières secondes."""
@@ -134,7 +149,28 @@ class Course:
                 "date": time.strftime("%Y-%m-%d %H:%M", time.localtime(self.debut)),
                 "debut": self.debut, "distance": round(self.dist), "duree": round(self.duree()),
                 "duree_totale": round(self.duree_totale()), "denivele": round(self.dplus),
+                "denivele_neg": round(self.dmoins), "vmax": round(self.vmax, 2),
+                "alt_min": None if self.alt_min is None else round(self.alt_min),
+                "alt_max": None if self.alt_max is None else round(self.alt_max),
                 "splits": [round(s, 1) for s in self.splits],
                 "segments": [[[round(t, 1), round(la, 6), round(lo, 6), None if e is None else round(e, 1)]
                               for t, la, lo, e in seg] for seg in self.segments if seg],
                 "strava_id": None}
+
+
+MOMENTS = ((5, "matinale"), (11, "du midi"), (14, "de l'après-midi"), (18, "du soir"), (22, "nocturne"))
+
+
+def nom_auto(sport, debut, distance, lieu=None):
+    """Nom proposé à la fin : « Course matinale à Pessac », « Sortie vélo longue distance du soir »…"""
+    h = time.localtime(debut).tm_hour
+    moment = "nocturne"
+    for depuis, mot in MOMENTS:
+        if h >= depuis:
+            moment = mot
+    if sport == "velo":
+        base = "Sortie vélo longue distance" if distance >= 80000 else "Sortie vélo"
+    else:
+        base = "Course longue" if distance >= 21000 else "Course"
+    nom = f"{base} {moment}"
+    return f"{nom} à {lieu}" if lieu else nom

@@ -77,7 +77,7 @@ class Compte:
     def envoyer_activite(self, act):
         """Activité réellement faite (points horodatés). Renvoie la version du serveur (avec son id)."""
         corps = {k: act.get(k) for k in ("nom", "sport", "debut", "duree", "duree_totale", "distance", "denivele",
-                                         "splits", "segments")}
+                                         "splits", "segments", "description", "ressenti")}
         corps["sport"] = corps["sport"] or "course"
         corps["splits"] = corps["splits"] or []
         return self._req("PUT", f"/api/moi/activites/{urllib.parse.quote(act['id'])}", corps)
@@ -103,6 +103,10 @@ class Compte:
         self._req("POST" if oui else "DELETE", f"/api/activites/{id_activite}/jaime")
 
     # --- Strava ---
+    def etat_strava(self):
+        """{configure, connecte, ...} : l'envoi direct n'est proposé que si les deux sont vrais."""
+        return self._req("GET", "/api/strava")
+
     def lien_strava(self):
         return self._req("POST", "/api/strava/connexion?retour=" + urllib.parse.quote("/strava-ok.html"))["url"]
 

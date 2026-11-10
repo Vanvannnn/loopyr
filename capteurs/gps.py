@@ -104,11 +104,42 @@ class Gps:
         Clock.schedule_once(lambda dt: self.sur_position(lat, lon, prec, 0))
 
 
-def demarrer_service(chemin_journal):
-    """Lance le service de course en premier plan (notification « Course en cours »)."""
+def demarrer_service(chemin_journal, sport="course"):
+    """Lance le service de suivi en premier plan (notification « Loopy — Course à pied / Cyclisme »)."""
+    import os
     from jnius import autoclass
     from capteurs.android import PAQUET, activite
-    autoclass(f"{PAQUET}.ServiceSuivi").start(activite(), "", "Starva", "Course en cours", chemin_journal)
+    act = activite()
+    try:  # pour une relance par Android (service « sticky ») : le service retrouve ici le journal
+        with open(os.path.join(act.getFilesDir().getAbsolutePath(), "journal_en_cours.txt"), "w", encoding="utf-8") as f:
+            f.write(chemin_journal)
+    except OSError:
+        pass
+    titre = "Loopy — Cyclisme" if sport == "velo" else "Loopy — Course à pied"
+    autoclass(f"{PAQUET}.ServiceSuivi").start(act, "", titre, "Départ…", chemin_journal)
+
+
+def economie_batterie_active():
+    """True si Android peut mettre l'app en veille pendant une sortie (optimisation de batterie active)."""
+    from jnius import autoclass
+    from capteurs.android import activite, systeme
+    act = activite()
+    pm = systeme(act, "power", "android.os.PowerManager")
+    return not pm.isIgnoringBatteryOptimizations(act.getPackageName())
+
+
+def demander_sans_economie():
+    """Fenêtre système « Autoriser Loopy à s'exécuter en arrière-plan ? » (ou les réglages, à défaut)."""
+    from jnius import autoclass
+    from capteurs.android import activite
+    act = activite()
+    Intent, Uri, Reglages = (autoclass("android.content.Intent"), autoclass("android.net.Uri"),
+                             autoclass("android.provider.Settings"))
+    try:
+        act.startActivity(Intent(Reglages.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                 Uri.parse("package:" + act.getPackageName())))
+    except Exception:
+        act.startActivity(Intent(Reglages.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
 
 
 def arreter_service():

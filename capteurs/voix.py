@@ -23,7 +23,7 @@ class Voix:
         self.preparer()
         try:
             from capteurs.android import chaine
-            self.tts.speak(chaine(texte), 1, None, chaine("starva"))  # 1 = QUEUE_ADD
+            self.tts.speak(chaine(texte), 1, None, chaine("loopy"))  # 1 = QUEUE_ADD
         except Exception as err:
             print(f"Voix : {err}")
 

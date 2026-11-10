@@ -32,6 +32,7 @@ NOM_RE = re.compile(r"^[a-z0-9_.-]{3,30}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 Visibilite = Literal["public", "abonnes", "prive"]
 Sport = Literal["course", "velo"]
+Ressenti = Literal["facile", "bien", "dur", "epuisant"]
 
 
 def base():
@@ -493,6 +494,8 @@ class Activite(BaseModel):
     segments: list[list[tuple[float, float, float, Optional[float]]]] = Field(min_length=1)
     itineraire: Optional[str] = None
     visibilite: Optional[Visibilite] = None
+    description: Optional[str] = Field(None, max_length=2000)
+    ressenti: Optional[Ressenti] = None
 
     @field_validator("segments")
     @classmethod
@@ -507,6 +510,8 @@ class Activite(BaseModel):
 class ModifActivite(BaseModel):
     nom: Optional[str] = Field(None, min_length=1, max_length=100)
     visibilite: Optional[Visibilite] = None
+    description: Optional[str] = Field(None, max_length=2000)
+    ressenti: Optional[Ressenti] = None
 
 
 def resume_activite(con, a, proprietaire, lecteur):
@@ -515,6 +520,8 @@ def resume_activite(con, a, proprietaire, lecteur):
     return {"id": a["id"], "id_client": a["id_client"] if lid == proprietaire["id"] else None, "nom": a["nom"],
             "sport": a["sport"], "debut": a["debut"], "duree": a["duree"], "distance": a["distance"],
             "denivele": a["denivele"], "visibilite": a["visibilite"], "auteur": proprietaire["nom"],
+            "description": a["description"] or "",
+            "ressenti": a["ressenti"] if lid == proprietaire["id"] else None,  # personnel : l'auteur seulement
             "avatar": avatar_url(proprietaire) if "avatar" in proprietaire.keys() else None,
             "trace": trace_publique(pts, proprietaire, lecteur),
             "jaimes": con.execute("SELECT COUNT(*) FROM jaimes WHERE activite=?", (a["id"],)).fetchone()[0],
@@ -545,6 +552,9 @@ def enregistrer_activite(id_client: str, d: Activite, u=Depends(utilisateur), co
                     (i, u["id"], id_client, *vals, d.visibilite or u["visibilite_activites"], time.time()))
     if d.visibilite:
         con.execute("UPDATE activites SET visibilite=? WHERE id=?", (d.visibilite, i))
+    if d.description is not None or d.ressenti is not None:
+        con.execute("UPDATE activites SET description=COALESCE(?, description), ressenti=? WHERE id=?",
+                    (d.description, d.ressenti, i))
     return resume_activite(con, con.execute("SELECT * FROM activites WHERE id=?", (i,)).fetchone(), u, u)
 
 

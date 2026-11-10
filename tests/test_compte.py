@@ -64,7 +64,8 @@ def test_serveur_injoignable():
 
 def test_altitudes_depuis_la_boucle():
     alt = Altitudes([(44.8, -0.63), (44.8005, -0.63)], [10.0, 12.0])
-    assert alt(44.80049, -0.63001) == 12.0
+    assert alt(44.80049, -0.63001) == pytest.approx(12.0, abs=0.05)
+    assert alt(44.80025, -0.63) == pytest.approx(11.0, abs=0.05)  # interpolée le long du tronçon
     assert alt(44.9, -0.63) is None  # loin de la boucle
 
 

@@ -54,6 +54,7 @@ async function charger() {
       <div class="stat"><span class="chiffre">${duree(a.duree)}</span><span class="doux">en mouvement</span></div>
       <div class="stat"><span class="chiffre">${rythme(a)}</span><span class="doux">${a.sport === "velo" ? "vitesse moyenne" : "allure moyenne"}</span></div>
       ${a.denivele != null ? `<div class="stat"><span class="chiffre">${Math.round(a.denivele)} m</span><span class="doux">de D+</span></div>` : ""}</div>
+    ${a.description ? `<p style="max-width:640px;margin:-8px 0 24px;white-space:pre-line">${echapper(a.description)}</p>` : ""}
     <div class="carte" id="carte" style="height:min(60vh,520px)"></div>
     ${a.trace.length < 2 ? `<p class="aide">Tracé trop court pour être montré sans révéler le départ.</p>` : ""}
     <div class="rangee" style="margin:24px 0">

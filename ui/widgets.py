@@ -302,7 +302,9 @@ class Segmente(BoxLayout):
         self.choix = choix
 
     def _cible(self):
-        b = self.boutons[self.choix]
+        b = self.boutons.get(self.choix)
+        if b is None:  # aucun choix (facultatif) : le curseur se replie
+            return (self.x, self.y), (0, 0)
         return b.pos, b.size
 
     def _placer(self, *_):
@@ -400,9 +402,20 @@ class Feuille(ModalView):
         Animation(y=0, d=0.38, t="out_back").start(self.boite)
 
     def fermer(self, ensuite=None):
+        """Une seule fois : pendant l'animation, la feuille est encore là et ses boutons répondaient à un second
+        appui, qui relançait l'action (fin de sortie enregistrée deux fois : l'app plantait)."""
+        if getattr(self, "fermee", False):
+            return
+        self.fermee = True
         a = Animation(y=-self.height, d=0.22, t="in_cubic")
         a.bind(on_complete=lambda *_: (self.dismiss(), ensuite and ensuite()))
         a.start(self.boite)
+
+    def on_touch_down(self, t):
+        return True if getattr(self, "fermee", False) else super().on_touch_down(t)
+
+    def on_touch_up(self, t):
+        return True if getattr(self, "fermee", False) else super().on_touch_up(t)
 
 
 def choix(titre, message, options, hauteur=dp(300)):

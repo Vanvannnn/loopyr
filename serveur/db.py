@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS activites(
   sport TEXT NOT NULL, debut REAL NOT NULL, duree REAL, duree_totale REAL, distance REAL NOT NULL,
   denivele REAL, splits TEXT, segments TEXT NOT NULL, itineraire TEXT, visibilite TEXT NOT NULL,
   strava_upload TEXT, strava_statut TEXT, strava_erreur TEXT, strava_activite TEXT, cree REAL NOT NULL,
+  description TEXT DEFAULT '', ressenti TEXT,
   UNIQUE(utilisateur, id_client));
 CREATE INDEX IF NOT EXISTS activites_par_date ON activites(utilisateur, debut);
 CREATE TABLE IF NOT EXISTS abonnements(suiveur INTEGER NOT NULL, suivi INTEGER NOT NULL, cree REAL NOT NULL,
@@ -46,8 +47,16 @@ def ouvrir(chemin=None):
     return con
 
 
+MIGRATIONS = {"activites": (("description", "TEXT DEFAULT ''"), ("ressenti", "TEXT"))}  # v0.5
+
+
 def initialiser(chemin=None):
     con = ouvrir(chemin)
     con.executescript(SCHEMA)
+    for table, colonnes in MIGRATIONS.items():  # bases créées par une version précédente
+        existantes = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        for nom, type_ in colonnes:
+            if nom not in existantes:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {nom} {type_}")
     con.commit()
     con.close()

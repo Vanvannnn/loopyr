@@ -1,6 +1,6 @@
 # Loopy
 
-Choisis vélo ou course, indique la distance : Loopy trace autour de ta position une **vraie boucle** qui revient à ton point de départ, **partout dans le monde**. Pendant la sortie, l'app te suit (carte, chrono, allure ou vitesse, D+, progression, splits annoncés à la voix). Ensuite, tu retrouves ta sortie, tu l'envoies sur Strava ou tu la partages.
+Choisis vélo ou course, indique la distance : Loopy trace autour de ta position une **vraie boucle** qui revient à ton point de départ, **partout dans le monde**. Pendant la sortie, l'app te guide (consignes de direction à l'écran et à la voix) et te suit (carte, chrono, allure ou vitesse, D+ et D− en direct, progression, splits), même téléphone verrouillé. Ensuite, tu retrouves ta sortie, tu l'envoies sur Strava ou tu la partages.
 
 Le projet contient trois parties :
 
@@ -39,6 +39,7 @@ L'app fonctionne **sans compte ni serveur** : génération, sortie, historique e
 - [docs/AUDIT.md](docs/AUDIT.md) : l'existant, la cause de la limite géographique, le plan, le choix du moteur
 - [docs/CONFIGURATION.md](docs/CONFIGURATION.md) : variables d'environnement, Strava, e-mails, mise en production, BRouter, tuiles, APK
 - [docs/BILAN.md](docs/BILAN.md) : ce qui est terminé, les tests réellement exécutés, ce qui demande une intervention extérieure
+- [docs/V05.md](docs/V05.md) : version 0.5, après les essais sur téléphone (crash à l'enregistrement, navigation, dénivelé, GPX, Strava)
 - [website/README.md](website/README.md) : le site
 - [logo/kit/GUIDE.md](logo/kit/GUIDE.md) : le logo et l'identité Sauge & Pêche
 

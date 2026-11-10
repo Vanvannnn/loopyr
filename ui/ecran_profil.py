@@ -20,7 +20,7 @@ from ui.carte import Trace, avec_zoom
 from ui.ecran_course import chrono
 from compte import ErreurCompte
 from ui.widgets import (BRUME, ENCRE, FOND, FOND_2, ROUTE, TRACE, Bouton, Croissance, Feuille, Segmente, Splits, apparaitre,
-                        echelle, confirmer, desarmer, fond, hexa_de, lab, nombre, unite)
+                        champ, echelle, confirmer, desarmer, fond, hexa_de, lab, nombre, unite)
 
 JOURS = ("lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim.")
 MOIS = ("janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc.")
@@ -212,7 +212,10 @@ class EcranHistorique(Screen):
             self.liste.add_widget(Bouton("Créer une boucle", lambda *_: self.app.aller("sport"), "encre", 64))
         for a in acts:
             sport = "Vélo" if a.get("sport") == "velo" else "Course"
-            self.liste.add_widget(Ligne(f"{sport}, {date_fr(a)}", f"{chrono(a.get('duree') or 0)}  {rythme(a)}",
+            haut = a.get("nom") or f"{sport}, {date_fr(a)}"
+            bas = f"{date_fr(a)} · {chrono(a.get('duree') or 0)} · {rythme(a)}" if a.get("nom") else \
+                f"{chrono(a.get('duree') or 0)}  {rythme(a)}"
+            self.liste.add_widget(Ligne(haut, bas,
                                         a["distance"] / 1000, lambda id_=a["id"]: self.app.ecran_detail.ouvrir(id_)))
 
     def boucles(self, favoris):
@@ -233,12 +236,16 @@ class EcranHistorique(Screen):
         self.l_totaux.text = f"{nombre(self.compte)}{unite('km', 22)}"
 
 
-IMPORT_STRAVA = ("Le GPX de ta sortie vient d'être enregistré (Téléchargements/Loopy).\n\n"
-                 "1. Ouvre strava.com dans un navigateur et connecte-toi.\n"
-                 "2. Touche le bouton + en haut à droite, puis «\u00a0Importer une activité\u00a0».\n"
-                 "3. Choisis «\u00a0Fichier\u00a0», puis le fichier loopy-….gpx.\n"
-                 "4. Vérifie le nom et le sport, puis «\u00a0Enregistrer et afficher\u00a0».\n\n"
-                 "L'app mobile Strava ne sait pas importer un fichier : passe par le site.")
+IMPORT_STRAVA = ("Le GPX de ta sortie est dans Téléchargements/Loopy.\n\n"
+                 "1. Touche « Ouvrir strava.com » ci-dessous et connecte-toi.\n"
+                 "2. Sur téléphone, menu du navigateur > « Version pour ordinateur » si la page d'import ne "
+                 "s'affiche pas.\n"
+                 "3. « Choisir un fichier » : Téléchargements > Loopy > le fichier loopy-….gpx.\n"
+                 "4. Vérifie le nom et le sport, puis « Enregistrer et afficher ».\n\n"
+                 "L'app mobile Strava ne sait pas importer un fichier : c'est le site qui le fait. "
+                 "Ce n'est pas un envoi automatique : Strava le réserve aux applications validées.")
+URL_IMPORT_STRAVA = "https://www.strava.com/upload/select"
+RESSENTIS = {"facile": "facile", "bien": "bien", "dur": "dur", "epuisant": "épuisant"}
 
 
 VISIBILITES = (("prive", "Moi seul"), ("abonnes", "Abonnés"), ("public", "Tout le monde"))
@@ -252,10 +259,11 @@ class EcranDetail(Screen):
         self.barre = barre_titre("", lambda *_: app.aller("historique", "retour"))
         self.barre.padding = [dp(20), dp(4), dp(20), 0]
         self.trace = Trace()
-        panneau = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(430),
-                            padding=[dp(20), dp(10), dp(20), dp(16)], spacing=dp(8))
+        panneau = BoxLayout(orientation="vertical", size_hint_y=None, height=dp(560),
+                            padding=[dp(20), dp(8), dp(20), dp(14)], spacing=dp(6))
         fond(panneau, FOND)
-        self.l_titre = lab("", 64, gras=True, chiffres=True, size_hint_y=None, height=dp(70))
+        self.l_nom = lab("", 20, gras=True, size_hint_y=None, height=dp(28), shorten=True, shorten_from="right")
+        self.l_titre = lab("", 60, gras=True, chiffres=True, size_hint_y=None, height=dp(64))
         chiffres = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(12))
         self.cases, self.legendes = [], []
         for legende, couleur in (("temps", None), ("allure, min/km", None), ("dénivelé", TRACE)):
@@ -267,19 +275,27 @@ class EcranDetail(Screen):
             self.cases.append(v)
             self.legendes.append(l)
             chiffres.add_widget(c)
+        self.l_plus = lab("", 14, BRUME, size_hint_y=None, height=dp(20))
+        self.l_desc = lab("", 15, size_hint_y=None, height=dp(0), valign="top")
         sv = ScrollView(do_scroll_x=False)
         self.splits = Splits()
         sv.add_widget(self.splits)
         self.l_info = lab("", 14, BRUME, size_hint_y=None, height=dp(40))
         self.visibilite = Segmente(VISIBILITES, "abonnes", hauteur=46)
         self.visibilite.bind(choix=self.changer_visibilite)
-        bas = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(8))
-        self.btn_gpx = Bouton("GPX", self.exporter, "contour", 60, 17)
-        self.btn_strava = Bouton("Vers Strava", self.strava, "encre", 60, 17)
-        self.btn_suppr = Bouton("Supprimer", self.supprimer, "contour", 60, 16, size_hint_x=0.8)
-        for b in (self.btn_gpx, self.btn_strava, self.btn_suppr):
+        gpx_l = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
+        self.btn_gpx = Bouton("Télécharger le GPX", self.exporter, "encre", 56, 16)
+        self.btn_partage = Bouton("Partager", self.partager, "contour", 56, 16, size_hint_x=0.6)
+        gpx_l.add_widget(self.btn_gpx)
+        gpx_l.add_widget(self.btn_partage)
+        bas = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
+        self.btn_strava = Bouton("Importer sur Strava", self.strava, "contour", 56, 15)
+        self.btn_modif = Bouton("Modifier", self.modifier, "contour", 56, 15, size_hint_x=0.6)
+        self.btn_suppr = Bouton("Supprimer", self.supprimer, "contour", 56, 15, size_hint_x=0.7)
+        for b in (self.btn_strava, self.btn_modif, self.btn_suppr):
             bas.add_widget(b)
-        for w in (self.l_titre, chiffres, sv, self.l_info, self.visibilite, bas):
+        for w in (self.l_nom, self.l_titre, chiffres, self.l_plus, self.l_desc, sv, self.l_info, self.visibilite,
+                  gpx_l, bas):
             panneau.add_widget(w)
         for w in (self.barre, avec_zoom(self.trace), panneau):
             col.add_widget(w)
@@ -289,6 +305,17 @@ class EcranDetail(Screen):
         a = self.act = self.app.stockage.charger(id_)
         velo = a.get("sport") == "velo"
         self.barre.titre.text = ("Vélo, " if velo else "Course, ") + date_fr(a)
+        self.l_nom.text = a.get("nom") or ("Sortie vélo" if velo else "Course")
+        plus = []
+        if a.get("denivele_neg") is not None:
+            plus.append(f"D− {a['denivele_neg']:.0f} m")
+        if a.get("vmax"):
+            plus.append(f"vitesse max {nombre(a['vmax'] * 3.6)} km/h")
+        if a.get("ressenti") in RESSENTIS:
+            plus.append(f"ressenti : {RESSENTIS[a['ressenti']]}")
+        self.l_plus.text = " · ".join(plus)
+        self.l_desc.text = a.get("description") or ""
+        self.l_desc.height = dp(44) if self.l_desc.text else 0
         self.l_titre.text = f"{nombre(a['distance'] / 1000, 2)}{unite('km', 22)}"
         self.legendes[1].text = "vitesse moy., km/h" if velo else "allure, min/km"
         moy = rythme(a).replace(" /km", "").replace(" km/h", "")  # l'unité est dans la légende
@@ -299,7 +326,7 @@ class EcranDetail(Screen):
         pas = max(1, len(pts) // 1500)
         self.trace.tracer([tuple(p) for p in pts[::pas]], 0.9)
         self.splits.remplir(a.get("splits") or ())
-        self.btn_gpx.disabled = not exportable(a)
+        self.btn_gpx.disabled = self.btn_partage.disabled = not exportable(a)
         self._charge = True
         self.visibilite.choix = a.get("visibilite") or self.app.reglages.get("visibilite", "abonnes")
         self._charge = False
@@ -312,22 +339,68 @@ class EcranDetail(Screen):
             self.l_info.text = "Synchronisée avec ton compte." if a.get("id_serveur") else "Pas encore synchronisée."
         desarmer(self.btn_suppr)
         self.btn_strava.disabled = not exportable(a)
+        self.strava_direct = False
+        self.btn_strava.text = "Importer sur Strava"
+        if self.app.compte.connecte:  # l'envoi direct n'est proposé que s'il marche vraiment pour ce compte
+            self._en_fond(self.app.compte.etat_strava, self._etat_strava)
         self.app.aller("detail", sens)
 
+    def _etat_strava(self, r):
+        if isinstance(r, dict) and r.get("configure") and r.get("connecte"):
+            self.strava_direct = True
+            self.btn_strava.text = "Envoyer à Strava"
+
     def exporter(self, *_):
+        """Téléchargement direct du GPX de l'activité (points horodatés), sans passer par le partage."""
         a = self.act
         try:
             self.l_info.text = self.app.exporter_gpx(f"loopy-{a['id']}.gpx", gpx(a))
+            return True
         except Exception as err:
-            self.l_info.text = f"Export impossible : {err}"
+            self.l_info.text = f"Téléchargement impossible : {err}"
+            return False
+
+    def partager(self, *_):
+        a = self.act
+        try:
+            self.l_info.text = self.app.partager_gpx(f"loopy-{a['id']}.gpx", gpx(a))
+        except Exception as err:
+            self.l_info.text = f"Partage impossible : {err}"
+
+    def modifier(self, *_):
+        """Nom, ressenti et description, modifiables à tout moment."""
+        from ui.ecran_fin import RESSENTIS as CHOIX
+        a = self.act
+        f = Feuille("Modifier la sortie", dp(470))
+        nom = champ("Nom de la sortie", a.get("nom") or "")
+        res = Segmente(CHOIX, a.get("ressenti") or "", hauteur=50)
+        desc = champ("Description ou ressenti (facultatif)", a.get("description") or "", multiline=True,
+                     height=dp(100))
+
+        def valider(*_):
+            a["nom"] = nom.text.strip()[:100] or a.get("nom")
+            a["ressenti"] = res.choix or None
+            a["description"] = desc.text.strip()[:2000]
+            self.app.stockage.enregistrer(a)
+            f.fermer()
+            self.ouvrir(a["id"], "avant")
+            if self.app.compte.connecte and a.get("id_serveur"):
+                self._en_fond(lambda: self.app.compte.modifier_activite(
+                    a["id_serveur"], nom=a["nom"], description=a["description"], ressenti=a["ressenti"]),
+                    lambda r: setattr(self.l_info, "text", str(r) if isinstance(r, Exception) else "Modifiée."))
+            else:
+                self.app.synchroniser_activite(a)
+        for w in (nom, res, desc, Bouton("Enregistrer", valider, "signal", 60, 18)):
+            f.ajouter(w)
+        f.ouvrir()
 
     def _en_fond(self, travail, fini):
         """travail() dans un fil (réseau), puis fini(résultat ou ErreurCompte) dans le fil de Kivy."""
         def fil():
             try:
                 r = travail()
-            except ErreurCompte as e:
-                r = e
+            except (ErreurCompte, KeyError, TypeError) as e:
+                r = e if isinstance(e, ErreurCompte) else ErreurCompte("Réponse inattendue du serveur")
             Clock.schedule_once(lambda dt: fini(r))
         threading.Thread(target=fil, daemon=True).start()
 
@@ -336,7 +409,7 @@ class EcranDetail(Screen):
         a = self.act
         if not a.get("id_serveur"):
             r = self.app.compte.envoyer_activite(a)
-            a["id_serveur"] = r["id"]
+            a["id_serveur"] = r["id"]  # (KeyError -> message, voir _en_fond)
             self.app.stockage.enregistrer(a)
         return a["id_serveur"]
 
@@ -350,7 +423,7 @@ class EcranDetail(Screen):
                       lambda r: setattr(self.l_info, "text", r if isinstance(r, Exception) else f"Visible par : {nom}"))
 
     def strava(self, *_):
-        if not self.app.compte.connecte:
+        if not self.strava_direct:  # pas d'envoi direct actif pour ce compte : l'import, qui marche toujours
             return self.strava_manuel()
         self.btn_strava.disabled = True
         self.l_info.text = "Envoi à Strava…"
@@ -382,11 +455,17 @@ class EcranDetail(Screen):
                                                      lambda r2: self._strava_suite(r2, essais + 1)), 2)
 
     def strava_manuel(self):
-        """Sans envoi direct (l'API Strava est réservée aux abonnés) : le GPX, puis l'import sur strava.com."""
-        self.exporter()
-        f = Feuille("Importer sur Strava", dp(500))
-        f.ajouter(lab(IMPORT_STRAVA, 16, size_hint_y=None, height=dp(310), valign="top"))
-        f.ajouter(Bouton("Compris", lambda *_: f.fermer(), "encre", 60, 18))
+        """Sans envoi direct : le GPX est téléchargé, puis on l'importe sur strava.com (gratuit, sans validation)."""
+        from capteurs.partage import ouvrir_url
+        if not self.exporter():
+            return
+        f = Feuille("Importer sur Strava", dp(560))
+        f.ajouter(lab(IMPORT_STRAVA, 16, size_hint_y=None, height=dp(330), valign="top"))
+        ligne = BoxLayout(size_hint_y=None, height=dp(60), spacing=dp(8))
+        ligne.add_widget(Bouton("Ouvrir strava.com", lambda *_: (ouvrir_url(URL_IMPORT_STRAVA), f.fermer()),
+                                "signal", 60, 17))
+        ligne.add_widget(Bouton("Fermer", lambda *_: f.fermer(), "contour", 60, 17, size_hint_x=0.5))
+        f.ajouter(ligne)
         f.ouvrir()
 
     def supprimer(self, btn):

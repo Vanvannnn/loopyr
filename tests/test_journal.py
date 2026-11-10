@@ -20,7 +20,7 @@ def test_rejouer_reconstruit_la_course(tmp_path):
     j2 = Journal(str(tmp_path / "en_cours.db"))
     course = None
     for e in j2.lire():
-        course = appliquer(course, e, altitude=lambda la, lo: 12.0)
+        course = appliquer(course, e, altitude=lambda la, lo, **_: 12.0)
     assert course.dist == pytest.approx(595, rel=0.02)
     assert course.pauses == [[1100.0, 1130.0]]
     assert course.segments[0][0][3] == 12.0

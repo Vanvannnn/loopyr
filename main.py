@@ -1,9 +1,10 @@
 """Loopy (Kivy) : des boucles de vélo ou de course générées autour de ta position, partout dans le monde ;
 le suivi de la sortie ; l'historique ; le compte, la communauté et Strava. Voir README.md."""
-import os, threading, time
+import logging, os, threading, time, traceback
 
 from kivy.animation import Animation, AnimationTransition
 from kivy.app import App
+from kivy.base import ExceptionHandler, ExceptionManager
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.uix.boxlayout import BoxLayout
@@ -11,7 +12,7 @@ from kivy.uix.screenmanager import ScreenManager, SlideTransition
 from kivy.utils import platform
 
 from boucles import BRouter
-from capteurs.partage import exporter
+from capteurs.partage import partager, telecharger
 from compte import Compte, ErreurCompte
 from geo import Cap
 from journal import Journal
@@ -40,11 +41,41 @@ def theme_systeme():
     return "nuit" if not 7 <= time.localtime().tm_hour < 20 else "jour"
 
 
+class FiletDeSecurite(ExceptionHandler):
+    """Dernier rempart : une erreur imprévue dans l'interface est écrite dans erreurs.log (dossier de l'app) et
+    signalée, au lieu de fermer l'app (et de perdre une sortie en cours). Les causes connues sont corrigées à la
+    source ; ce filet sert à ne jamais perdre de données et à garder une trace pour corriger les suivantes."""
+
+    def __init__(self, app):
+        super().__init__()
+        self.app, self.n = app, 0
+
+    def handle_exception(self, err):
+        if isinstance(err, (KeyboardInterrupt, SystemExit)):
+            return ExceptionManager.RAISE
+        self.n += 1
+        try:
+            with open(os.path.join(self.app.user_data_dir, "erreurs.log"), "a", encoding="utf-8") as f:
+                f.write(time.strftime("--- %Y-%m-%d %H:%M:%S ---\n") + traceback.format_exc() + "\n")
+        except OSError:
+            pass
+        logging.exception("erreur dans l'interface")
+        if self.n > 20:  # une erreur en boucle : mieux vaut s'arrêter que geler l'écran
+            return ExceptionManager.RAISE
+        try:
+            self.app.signaler(f"Un problème est survenu ({type(err).__name__}). Tes données sont conservées.")
+        except Exception:
+            pass
+        return ExceptionManager.PASS
+
+
 class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données sur PC
     title = "Loopy"
 
     def build(self):
         from ui.carte import Tuiles
+        ExceptionManager.add_handler(FiletDeSecurite(self))
+        Window.softinput_mode = "below_target"  # le clavier ne cache pas le champ qu'on remplit
         self.gps_pos, self.gps_prec, self.gps_age, self.cap = None, None, 0, Cap()
         self.logo_vu, self.theme_en_cours, self.gps = False, False, None
         self.chemin_reglages = os.path.join(self.user_data_dir, "reglages.json")
@@ -72,6 +103,7 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
         from ui.ecran_accueil import EcranAccueil, EcranDistance, EcranSport
         from ui.ecran_compte import EcranCommunaute, EcranProfil
         from ui.ecran_course import EcranCourse
+        from ui.ecran_fin import EcranFin
         from ui.ecran_plan import EcranPlan
         from ui.ecran_profil import EcranDetail, EcranHistorique
         widgets.appliquer_theme(theme)
@@ -79,11 +111,11 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
         self.sm.clear_widgets()
         self.racine.clear_widgets()
         self.ecran_accueil, self.ecran_sport, self.ecran_distance = EcranAccueil(self), EcranSport(self), EcranDistance(self)
-        self.ecran_plan, self.ecran_course = EcranPlan(self), EcranCourse(self)
+        self.ecran_plan, self.ecran_course, self.ecran_fin = EcranPlan(self), EcranCourse(self), EcranFin(self)
         self.ecran_historique, self.ecran_detail = EcranHistorique(self), EcranDetail(self)
         self.ecran_profil, self.ecran_communaute = EcranProfil(self), EcranCommunaute(self)
         for e in (self.ecran_accueil, self.ecran_sport, self.ecran_distance, self.ecran_plan, self.ecran_course,
-                  self.ecran_historique, self.ecran_detail, self.ecran_profil, self.ecran_communaute):
+                  self.ecran_fin, self.ecran_historique, self.ecran_detail, self.ecran_profil, self.ecran_communaute):
             self.sm.add_widget(e)
         self.nav = widgets.Nav(lambda n: self.aller(n, "avant"))
         self.racine.add_widget(self.sm)
@@ -95,7 +127,7 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
 
     def changer_theme(self):
         """Jour <-> nuit : l'écran s'efface, est reconstruit, puis revient en fondu, sur le même écran."""
-        if self.sm.current == "course" or self.ecran_plan.calcul or self.theme_en_cours:
+        if self.sm.current in ("course", "fin") or self.ecran_plan.calcul or self.theme_en_cours:
             return
         self.theme_en_cours = True
         theme = "nuit" if widgets.theme == "jour" else "jour"
@@ -123,7 +155,7 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
         self.sm.transition.direction = SENS[sens]
         self.sm.current = ecran
         self.nav.montrer(ecran)
-        en_course = ecran == "course"  # pendant une sortie, toute la place va à la carte et aux chiffres
+        en_course = ecran in ("course", "fin")  # pendant et à la fin d'une sortie : toute la place à la sortie
         self.nav.opacity, self.nav.disabled = (0, True) if en_course else (1, False)
         self.nav.height = 0 if en_course else widgets.dp(62)
 
@@ -161,7 +193,18 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
     def on_pause(self):
         if self.gps_pos:
             self.sauver_reglages(position=list(self.gps_pos))
-        return True  # la course continue dans le service GPS ; on relit le journal au retour
+        return True  # la sortie continue dans le service GPS ; on relit le journal au retour
+
+    def on_resume(self):
+        self.ecran_course.au_retour()
+
+    def signaler(self, texte):
+        """Message bref, sans bloquer : la bande de l'écran de sortie, ou une feuille ailleurs."""
+        if self.sm.current == "course":
+            self.ecran_course.bande.gauche.text = texte
+            return
+        from ui.widgets import choix
+        choix("Oups", texte, [("Compris", lambda: None, "encre")], hauteur=widgets.dp(240))
 
     def on_stop(self):
         if self.gps_pos:
@@ -181,7 +224,11 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
             self.ecran_accueil.etat_gps("GPS capté" + (f", à {precision:.0f} m près" if precision else ""))
 
     def exporter_gpx(self, nom, texte):
-        return exporter(nom, texte, os.path.join(self.user_data_dir, "exports"))
+        """Téléchargement direct dans Téléchargements/Loopy (sans passer par le partage)."""
+        return telecharger(nom, texte, os.path.join(self.user_data_dir, "exports"))
+
+    def partager_gpx(self, nom, texte):
+        return partager(nom, texte, os.path.join(self.user_data_dir, "exports"))
 
     # --- synchronisation avec le compte (en arrière-plan ; tout reste local si elle échoue) ---
     def _fond(self, travail):
@@ -192,8 +239,8 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
         def travail():
             try:
                 r = self.compte.envoyer_activite(act)
-                Clock.schedule_once(lambda dt: self._marquer(self.stockage, act["id"], r["id"]))
-            except ErreurCompte:
+                Clock.schedule_once(lambda dt: self._marquer(self.stockage, act["id"], r.get("id")))
+            except (ErreurCompte, AttributeError):
                 pass  # renvoyée au prochain lancement
         self._fond(travail)
 
@@ -204,12 +251,14 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
                     self.compte.modifier_itineraire(it["id_serveur"], favori=bool(it.get("favori")), nom=it["nom"])
                 else:
                     r = self.compte.enregistrer_itineraire(it)
-                    Clock.schedule_once(lambda dt: self._marquer(self.itineraires, it["id"], r["id"]))
-            except ErreurCompte:
+                    Clock.schedule_once(lambda dt: self._marquer(self.itineraires, it["id"], r.get("id")))
+            except (ErreurCompte, AttributeError):
                 pass
         self._fond(travail)
 
     def _marquer(self, stockage, id_, id_serveur):
+        if not id_serveur:
+            return
         try:
             x = stockage.charger(id_)
         except (OSError, ValueError):
