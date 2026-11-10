@@ -61,7 +61,7 @@
 
   /* exemples réels */
   .exemples { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px 32px; }
-  .exemple svg { width: 100%; aspect-ratio: 1; background: var(--fond-2); border-radius: var(--r); padding: 14%; overflow: visible; }
+  .exemple .carte { width: 100%; aspect-ratio: 1; background: var(--fond-2); border-radius: var(--r); overflow: hidden; }
   .exemple .titre { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 10px; gap: 12px; }
   .exemple .titre .chiffre { font-size: 2rem; }
   @media (max-width: 860px) { .exemples { grid-template-columns: 1fr 1fr; } }
@@ -74,6 +74,7 @@
   .fin { text-align: left; }
   .fin h2 { font-size: clamp(3rem, 8vw, 6rem); max-width: 14ch; margin-bottom: 28px; }
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
 <header class="entete">
@@ -223,7 +224,9 @@
   </div>
 </footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script type="module">
+import { carte, boucle, depart, cadrer } from "/assets/js/carte.js";
 import { ICONES, km, mouvementReduit, barre, VOIES } from "/assets/js/commun.js";
 
 document.querySelectorAll("[data-icone]").forEach((e) => { e.innerHTML = ICONES[e.dataset.icone]; });
@@ -277,14 +280,20 @@ montrer("course");
 // --- exemples ---
 document.getElementById("exemples").innerHTML = exs.map((ex, i) => `
   <figure class="exemple" style="margin:0">
-    <svg viewBox="0 0 100 100" aria-label="Tracé de la boucle de ${ex.ville}" role="img" data-i="${i}"></svg>
+    <div class="carte" role="img" aria-label="Carte de la boucle de ${ex.ville}" data-i="${i}"></div>
     <figcaption>
       <div class="titre"><strong>${ex.ville}, ${nomSport[ex.sport]}</strong><span class="chiffre">${km(ex.distance)} km</span></div>
       ${barre(ex.voies, VOIES)}
       <p class="petit doux" style="margin-top:8px">${ex.montee} m de D+, revêtement connu sur ${Math.round(ex.surface_connue * 100)} % du tracé</p>
     </figcaption>
   </figure>`).join("");
-document.querySelectorAll("#exemples svg").forEach((s) => dessiner(s, exs[+s.dataset.i], 1.4));
+// sur un vrai fond de carte : on voit la boucle passer dans les rues, les parcs, le long des pistes
+document.querySelectorAll("#exemples .carte").forEach((el) => {
+  const ex = exs[+el.dataset.i], m = carte(el, ex.coords[0], 13, false);
+  boucle(m, ex.coords, { epaisseur: 4 });
+  depart(m, ex.coords[0]);
+  cadrer(m, ex.coords);
+});
 
 // --- les bornes : le tracé avance une fois, quand on arrive dessus ---
 const bornes = document.getElementById("bornes");
