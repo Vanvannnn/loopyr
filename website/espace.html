@@ -111,6 +111,7 @@ async function activites() {
         ${u.strava.configure && u.strava.connecte && !a.strava?.activite ? `<button class="bouton petit" type="button" data-strava-envoi>Envoyer vers Strava</button>` : ""}
       </div>
     </article>`).join("")}</div>
+    ${!u.strava.configure ? `<p class="message" style="margin-top:24px">Pour mettre une sortie sur Strava : télécharge son GPX, puis importe-le sur strava.com (étapes dans l'onglet <a href="#profil">Profil</a>).</p>` : ""}
     ${u.strava.configure && !u.strava.connecte ? `<p class="message" style="margin-top:24px">Relie ton compte Strava dans l'onglet <a href="#profil">Profil</a> pour y envoyer tes activités.</p>` : ""}`;
   vue.querySelectorAll("[data-vis]").forEach((s) => s.addEventListener("change", async () => {
     const id = s.closest("[data-id]").dataset.id;
@@ -242,7 +243,12 @@ async function profil() {
   </form>
   <section class="profil-form" style="margin-top:48px"><h2 style="font-size:2rem;margin-bottom:12px">Strava</h2>
     ${msgStrava ? `<p class="message${retour === "ok" ? "" : " erreur"}" style="margin-bottom:14px">${msgStrava}</p>` : ""}
-    ${!u.strava.configure ? `<p class="doux">L'envoi vers Strava n'est pas encore activé sur ce serveur Loopy.</p>`
+    ${!u.strava.configure ? `<p>Pour mettre une sortie sur Strava, importe son GPX :</p>
+      <ol style="margin:10px 0 0;padding-left:1.2em">
+        <li>Dans l'onglet <a href="#activites">Activités</a>, clique sur « GPX de l'activité » : le fichier se télécharge.</li>
+        <li>Sur <a href="https://www.strava.com/upload/select">strava.com</a>, clique sur le bouton + en haut à droite, puis « Importer une activité ».</li>
+        <li>Choisis « Fichier », sélectionne le GPX, vérifie le nom et le sport, puis « Enregistrer et afficher ».</li></ol>
+      <p class="aide">L'app mobile Strava ne sait pas importer de fichier : passe par le site, sur ordinateur ou téléphone.</p>`
       : u.strava.connecte ? `<p>Relié au compte Strava de <strong>${echapper(u.strava.athlete || "")}</strong>. Tes activités terminées peuvent y être envoyées depuis l'onglet Activités.</p>
         <button class="bouton second" type="button" id="strava-off" style="margin-top:12px">Délier Strava</button>`
       : `<p>Relie ton compte pour envoyer tes activités terminées sur Strava. Loopy demande seulement le droit de créer des activités et de lire celles qu'il envoie.</p>

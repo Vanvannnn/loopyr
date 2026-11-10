@@ -19,7 +19,7 @@ from gpx import exportable, gpx
 from ui.carte import Trace, avec_zoom
 from ui.ecran_course import chrono
 from compte import ErreurCompte
-from ui.widgets import (BRUME, ENCRE, FOND, FOND_2, ROUTE, TRACE, Bouton, Croissance, Segmente, Splits, apparaitre,
+from ui.widgets import (BRUME, ENCRE, FOND, FOND_2, ROUTE, TRACE, Bouton, Croissance, Feuille, Segmente, Splits, apparaitre,
                         echelle, confirmer, desarmer, fond, hexa_de, lab, nombre, unite)
 
 JOURS = ("lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim.")
@@ -233,6 +233,14 @@ class EcranHistorique(Screen):
         self.l_totaux.text = f"{nombre(self.compte)}{unite('km', 22)}"
 
 
+IMPORT_STRAVA = ("Le GPX de ta sortie vient d'être enregistré (Téléchargements/Loopy).\n\n"
+                 "1. Ouvre strava.com dans un navigateur et connecte-toi.\n"
+                 "2. Touche le bouton + en haut à droite, puis «\u00a0Importer une activité\u00a0».\n"
+                 "3. Choisis «\u00a0Fichier\u00a0», puis le fichier loopy-….gpx.\n"
+                 "4. Vérifie le nom et le sport, puis «\u00a0Enregistrer et afficher\u00a0».\n\n"
+                 "L'app mobile Strava ne sait pas importer un fichier : passe par le site.")
+
+
 VISIBILITES = (("prive", "Moi seul"), ("abonnes", "Abonnés"), ("public", "Tout le monde"))
 
 
@@ -299,7 +307,7 @@ class EcranDetail(Screen):
         if not exportable(a):
             self.l_info.text = "Sortie d'avant la mise à jour, sans heure par point : pas d'export"
         elif not self.app.compte.connecte:
-            self.l_info.text = "Connecte-toi (Profil) pour la partager et l'envoyer vers Strava."
+            self.l_info.text = "Connecte-toi (Profil) pour la partager avec la communauté."
         else:
             self.l_info.text = "Synchronisée avec ton compte." if a.get("id_serveur") else "Pas encore synchronisée."
         desarmer(self.btn_suppr)
@@ -343,8 +351,7 @@ class EcranDetail(Screen):
 
     def strava(self, *_):
         if not self.app.compte.connecte:
-            self.l_info.text = "Connecte-toi d'abord à ton compte Loopy (Profil), puis relie Strava."
-            return
+            return self.strava_manuel()
         self.btn_strava.disabled = True
         self.l_info.text = "Envoi à Strava…"
         self._en_fond(lambda: self.app.compte.envoyer_strava(self._id_serveur()), self._strava_suite)
@@ -352,8 +359,8 @@ class EcranDetail(Screen):
     def _strava_suite(self, r, essais=0):
         if isinstance(r, ErreurCompte):
             self.btn_strava.disabled = False
-            if r.code == 404 or "non connecté" in str(r):
-                self.l_info.text = "Relie d'abord ton compte Strava (Profil > Strava)."
+            if r.code == 503 or "non connecté" in str(r):  # envoi direct non activé : import à la main
+                self.strava_manuel()
             else:
                 self.l_info.text = str(r)
             return
@@ -373,6 +380,14 @@ class EcranDetail(Screen):
         id_s = self.act["id_serveur"]
         Clock.schedule_once(lambda dt: self._en_fond(lambda: self.app.compte.suivre_strava(id_s),
                                                      lambda r2: self._strava_suite(r2, essais + 1)), 2)
+
+    def strava_manuel(self):
+        """Sans envoi direct (l'API Strava est réservée aux abonnés) : le GPX, puis l'import sur strava.com."""
+        self.exporter()
+        f = Feuille("Importer sur Strava", dp(500))
+        f.ajouter(lab(IMPORT_STRAVA, 16, size_hint_y=None, height=dp(310), valign="top"))
+        f.ajouter(Bouton("Compris", lambda *_: f.fermer(), "encre", 60, 18))
+        f.ouvrir()
 
     def supprimer(self, btn):
         def go():

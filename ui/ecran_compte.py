@@ -141,8 +141,9 @@ class EcranProfil(Screen):
         c.add_widget(section("Strava"))
         st = r["strava"]
         if not st["configure"]:
-            c.add_widget(lab("L'envoi vers Strava n'est pas encore activé sur ce serveur Loopy.", 15, BRUME,
-                             size_hint_y=None, height=dp(44)))
+            c.add_widget(lab("Pour mettre une sortie sur Strava : ouvre-la dans Historique et touche « Vers Strava ». "
+                             "Loopy enregistre son GPX et t'explique comment l'importer sur strava.com.", 15, BRUME,
+                             size_hint_y=None, height=dp(66)))
         elif st["connecte"]:
             c.add_widget(lab(f"Relié au compte Strava de {st['athlete'] or 'ton compte'}. Envoie une sortie depuis "
                              "son détail (Historique).", 15, BRUME, size_hint_y=None, height=dp(44)))
