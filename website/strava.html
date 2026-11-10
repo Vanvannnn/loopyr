@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Importer sur Strava</title>
+<meta name="description" content="Mettre une sortie enregistrée avec Loopy sur Strava : récupérer le GPX, puis l'importer sur strava.com.">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+<style>
+  .titre-page { padding: 48px 0 8px; }
+  .titre-page h1 { font-size: clamp(2.8rem, 8vw, 5rem); margin-bottom: 16px; max-width: 14ch; }
+  .titre-page p { font-size: 1.15rem; }
+  .etapes { list-style: none; padding: 0; margin: 48px 0 0; counter-reset: etape; }
+  .etapes > li { counter-increment: etape; display: grid; grid-template-columns: 56px minmax(0, 1fr) 240px; gap: 0 28px;
+    padding: 36px 0; border-top: 1px solid var(--fond-3); align-items: start; }
+  .etapes > li::before { content: counter(etape); width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+    font: 800 1.6rem/1 var(--chiffres); border: 3px solid var(--encre); }
+  .etapes > li:first-child::before { background: var(--peche); color: var(--sur-peche); border-color: var(--sur-peche); }
+  .etapes h2 { font-size: 2rem; margin: 6px 0 10px; }
+  .etapes p + p { margin-top: 10px; }
+  .etapes figure { margin: 0; }
+  .etapes img { width: 100%; height: auto; border-radius: 22px; border: 6px solid var(--encre); }
+  .etapes figcaption { font-size: .88rem; color: var(--brume); margin-top: 8px; }
+  .astuce { margin-top: 14px; padding: 12px 16px; border-radius: var(--r-petit); background: var(--fond-2); font-size: 1rem; }
+  .problemes { margin: 64px 0 24px; }
+  .problemes h2 { margin-bottom: 20px; }
+  .problemes dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 18px 32px; margin: 0; }
+  .problemes dt { font-weight: 700; }
+  .problemes dd { margin: 0; color: var(--brume); }
+  @media (max-width: 760px) {
+    .etapes > li { grid-template-columns: 48px minmax(0, 1fr); gap: 0 16px; }
+    .etapes figure { grid-column: 2; margin-top: 20px; max-width: 240px; }
+    .problemes dl { grid-template-columns: 1fr; gap: 4px; }
+    .problemes dd { margin-bottom: 14px; }
+  }
+</style>
+</head>
+<body>
+<header class="entete">
+  <div class="conteneur">
+    <a class="marque" href="/" aria-label="Loopy, accueil">
+      <img class="clair" src="/assets/img/loopy-horizontal-couleur-clair.svg" alt="Loopy" width="69" height="34">
+      <img class="sombre" src="/assets/img/loopy-horizontal-sombre.svg" alt="Loopy" width="69" height="34">
+    </a>
+    <nav class="nav" aria-label="Principale">
+      <a href="/creer.html">Créer<span class="large"> une boucle</span></a>
+      <a class="large" href="/communaute.html">Communauté</a>
+      <a href="/strava.html" aria-current="page">Strava</a>
+      <a href="/connexion.html" data-compte>Se connecter</a>
+    </nav>
+  </div>
+</header>
+<main class="conteneur">
+  <div class="titre-page">
+    <h1>Ta sortie sur Strava</h1>
+    <p class="doux">Loopy enregistre ta sortie avec l'heure de chaque point. Strava la reçoit sous forme de fichier GPX, que tu importes toi-même : deux minutes, depuis ton téléphone ou ton ordinateur.</p>
+  </div>
+
+  <ol class="etapes">
+    <li>
+      <div>
+        <h2>Ouvre ta sortie</h2>
+        <p>Dans l'app Loopy, va dans <strong>Historique</strong>, onglet Activités, et touche la sortie à envoyer.</p>
+      </div>
+      <figure><img src="/assets/img/guide/historique.webp" alt="L'historique de l'app Loopy : le total de kilomètres, les kilomètres par semaine et la liste des sorties." width="412" height="880" loading="lazy">
+        <figcaption>L'historique de l'app.</figcaption></figure>
+    </li>
+    <li>
+      <div>
+        <h2>Touche « Vers Strava »</h2>
+        <p>Le fichier GPX de ta sortie est enregistré dans <strong>Téléchargements/Loopy</strong>, sous le nom <code>loopy-date.gpx</code>.</p>
+        <p class="astuce">Depuis un ordinateur : <a href="/espace.html#activites">Mon espace</a>, onglet Activités, bouton « GPX de l'activité ».</p>
+      </div>
+      <figure><img src="/assets/img/guide/detail.webp" alt="Le détail d'une sortie vélo de 19,86 km dans l'app, avec les boutons GPX, Vers Strava et Supprimer en bas." width="412" height="880" loading="lazy">
+        <figcaption>Le détail d'une sortie : le bouton est en bas.</figcaption></figure>
+    </li>
+    <li>
+      <div>
+        <h2>Garde la fiche sous les yeux</h2>
+        <p>L'app te rappelle les étapes suivantes. Touche « Compris » quand tu es prêt.</p>
+      </div>
+      <figure><img src="/assets/img/guide/fiche.webp" alt="La fiche « Importer sur Strava » de l'app, qui reprend les étapes d'import." width="412" height="880" loading="lazy">
+        <figcaption>La fiche affichée par l'app.</figcaption></figure>
+    </li>
+    <li>
+      <div>
+        <h2>Ouvre la page d'import de Strava</h2>
+        <p>Dans ton navigateur, connecte-toi sur Strava, puis ouvre la page d'import. Tu peux aussi y arriver par le bouton <strong>+</strong> en haut à droite de strava.com, puis « Importer une activité ».</p>
+        <p style="margin-top:18px"><a class="bouton" href="https://www.strava.com/upload/select" rel="noopener">Ouvrir l'import Strava</a></p>
+        <p class="astuce">Sur téléphone, si Strava t'envoie vers son app au lieu du formulaire, active « Version pour ordinateur » dans le menu ⋮ de Chrome, puis recharge la page. L'app Strava ne sait pas importer de fichier.</p>
+      </div>
+    </li>
+    <li>
+      <div>
+        <h2>Choisis le fichier</h2>
+        <p>Sur la page d'import, choisis <strong>« Fichier »</strong>, puis le fichier <code>loopy-….gpx</code> dans Téléchargements/Loopy. Vérifie le nom et le sport, puis <strong>« Enregistrer et afficher »</strong>.</p>
+        <p>Ta sortie apparaît sur Strava avec sa vraie date, sa durée, sa distance et ton allure ou ta vitesse.</p>
+      </div>
+    </li>
+  </ol>
+
+  <section class="problemes" aria-labelledby="t-problemes">
+    <h2 id="t-problemes">Si ça coince</h2>
+    <dl>
+      <dt>Strava refuse le fichier</dt>
+      <dd>Vérifie que c'est le GPX d'une sortie (bouton « Vers Strava » ou « GPX de l'activité »). Le GPX d'une boucle prévue n'a pas d'heures : c'est un itinéraire, pas une activité.</dd>
+      <dt>Strava parle de doublon</dt>
+      <dd>Cette sortie est déjà sur ton compte Strava : rien à refaire.</dd>
+      <dt>Je ne trouve pas le fichier</dt>
+      <dd>Ouvre l'app Fichiers du téléphone, dossier Téléchargements, puis Loopy. Les sorties enregistrées avant la mise à jour de l'app n'ont pas d'heure par point et ne peuvent pas être exportées.</dd>
+      <dt>Le sport n'est pas le bon</dt>
+      <dd>Change-le dans le formulaire d'import, ou ensuite en modifiant l'activité sur Strava.</dd>
+    </dl>
+  </section>
+  <p class="aide">Captures de l'app Loopy avec une sortie d'exemple. Strava est une marque de Strava, Inc. ; Loopy n'est pas affilié à Strava.</p>
+</main>
+<footer class="pied">
+  <div class="conteneur">
+    <p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p>
+    <nav aria-label="Pied de page"><a href="/creer.html">Créer une boucle</a><a href="/communaute.html">Communauté</a><a href="/strava.html">Importer sur Strava</a></nav>
+  </div>
+</footer>
+<script type="module" src="/assets/js/commun.js"></script>
+</body>
+</html>

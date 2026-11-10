@@ -290,8 +290,8 @@ class EcranDetail(Screen):
         velo = a.get("sport") == "velo"
         self.barre.titre.text = ("Vélo, " if velo else "Course, ") + date_fr(a)
         self.l_titre.text = f"{nombre(a['distance'] / 1000, 2)}{unite('km', 22)}"
-        self.legendes[1].text = "vitesse moyenne" if velo else "allure, min/km"
-        moy = rythme(a).replace(" /km", "") if not velo else rythme(a)
+        self.legendes[1].text = "vitesse moy., km/h" if velo else "allure, min/km"
+        moy = rythme(a).replace(" /km", "").replace(" km/h", "")  # l'unité est dans la légende
         for case, texte in zip(self.cases, (chrono(a.get("duree") or 0), moy,
                                             f"{a.get('denivele') or 0:.0f}{unite('m', 14)}")):
             case.text = texte
