@@ -49,3 +49,4 @@ L'app fonctionne **sans compte ni serveur** : génération, sortie, historique e
 - Calcul des itinéraires : [BRouter](https://github.com/abrensch/brouter) (MIT). `profils/loopy-velo-route.brf` est dérivé de son profil `fastbike`.
 - Recherche de lieux : Nominatim (OSM).
 - Polices : Barlow Condensed et Atkinson Hyperlegible, sous licence OFL (`polices/`).
+# loopyr
