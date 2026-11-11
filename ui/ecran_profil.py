@@ -284,10 +284,8 @@ class EcranDetail(Screen):
         self.visibilite = Segmente(VISIBILITES, "abonnes", hauteur=46)
         self.visibilite.bind(choix=self.changer_visibilite)
         gpx_l = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
-        self.btn_gpx = Bouton("Télécharger le GPX", self.exporter, "encre", 56, 16)
-        self.btn_partage = Bouton("Partager", self.partager, "contour", 56, 16, size_hint_x=0.6)
+        self.btn_gpx = Bouton("Envoyer le GPX", self.partager, "encre", 56, 16)  # enregistré + menu de partage
         gpx_l.add_widget(self.btn_gpx)
-        gpx_l.add_widget(self.btn_partage)
         bas = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
         self.btn_strava = Bouton("Importer sur Strava", self.strava, "contour", 56, 15)
         self.btn_modif = Bouton("Modifier", self.modifier, "contour", 56, 15, size_hint_x=0.6)
@@ -326,7 +324,7 @@ class EcranDetail(Screen):
         pas = max(1, len(pts) // 1500)
         self.trace.tracer([tuple(p) for p in pts[::pas]], 0.9)
         self.splits.remplir(a.get("splits") or ())
-        self.btn_gpx.disabled = self.btn_partage.disabled = not exportable(a)
+        self.btn_gpx.disabled = not exportable(a)
         self._charge = True
         self.visibilite.choix = a.get("visibilite") or self.app.reglages.get("visibilite", "abonnes")
         self._charge = False

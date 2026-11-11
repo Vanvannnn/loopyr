@@ -113,7 +113,10 @@ def inscrire(d: Inscription, req: Request, rep: Response, con=Depends(base)):
     limiter(req, "inscription", 5)
     if con.execute("SELECT 1 FROM utilisateurs WHERE email=%s OR nom=%s", (d.email, d.nom)).fetchone():
         raise HTTPException(409, "Cette adresse ou ce nom d'utilisateur est déjà pris")
-    cur = con.execute("INSERT INTO utilisateurs(email, nom, mdp, cree) VALUES (%s,%s,%s,%s) RETURNING id",
+    # protection par défaut (RGPD art. 25) : une trace GPS révèle où l'on vit ; s'abonner ne demande pas d'accord,
+    # donc les activités d'un nouveau compte sont privées jusqu'à ce que la personne choisisse de les montrer
+    cur = con.execute("INSERT INTO utilisateurs(email, nom, mdp, cree, visibilite_activites) "
+                      "VALUES (%s,%s,%s,%s,'prive') RETURNING id",
                       (d.email, d.nom, securite.hacher_mdp(d.mot_de_passe), time.time()))
     u = con.execute("SELECT * FROM utilisateurs WHERE id=%s", (cur.fetchone()["id"],)).fetchone()
     return {"jeton": ouvrir_session(con, u["id"], rep), "utilisateur": moi_public(u)}
@@ -219,6 +222,36 @@ def modifier_moi(d: Profil, u=Depends(utilisateur), con=Depends(base)):
     for k, v in champs.items():  # noms de colonnes : uniquement ceux du modèle Profil
         con.execute(f"UPDATE utilisateurs SET {k}=%s WHERE id=%s", (v, u["id"]))
     return moi_public(con.execute("SELECT * FROM utilisateurs WHERE id=%s", (u["id"],)).fetchone())
+
+
+@app.get("/api/moi/export")
+def exporter_mes_donnees(u=Depends(utilisateur), con=Depends(base)):
+    """Toutes les données du compte, en JSON (RGPD : droit d'accès et à la portabilité). Pas de secret :
+    ni mot de passe haché, ni jetons Strava ou de session."""
+    uid = u["id"]
+    lignes = lambda sql: [dict(r) for r in con.execute(sql, (uid,))]  # noqa: E731
+    profil = {k: u[k] for k in ("nom", "email", "bio", "sport", "visibilite_profil", "visibilite_activites",
+                                  "masquer_depart", "cree")}
+    donnees = {
+        "compte": {**profil, "preferences": json.loads(u["preferences"] or "{}")},
+        "itineraires": lignes("SELECT id, nom, sport, distance, montee, coords, ele, resume, favori, partage, cree "
+                              "FROM itineraires WHERE utilisateur=%s ORDER BY cree"),
+        "activites": lignes("SELECT id, id_client, nom, sport, debut, duree, duree_totale, distance, denivele, splits, "
+                            "segments, itineraire, visibilite, description, ressenti, strava_activite, cree "
+                            "FROM activites WHERE utilisateur=%s ORDER BY debut"),
+        "abonnements": lignes("SELECT u.nom, a.cree FROM abonnements a JOIN utilisateurs u ON u.id=a.suivi WHERE a.suiveur=%s"),
+        "abonnes": lignes("SELECT u.nom, a.cree FROM abonnements a JOIN utilisateurs u ON u.id=a.suiveur WHERE a.suivi=%s"),
+        "jaimes": lignes("SELECT activite FROM jaimes WHERE utilisateur=%s"),
+        "commentaires": lignes("SELECT activite, texte, cree FROM commentaires WHERE utilisateur=%s ORDER BY cree"),
+        "strava": lignes("SELECT athlete, nom, portee FROM strava WHERE utilisateur=%s"),
+    }
+    for t in ("itineraires", "activites"):  # colonnes stockées en texte JSON : rendues lisibles
+        for r in donnees[t]:
+            for k in ("coords", "ele", "resume", "splits", "segments"):
+                if isinstance(r.get(k), str):
+                    r[k] = json.loads(r[k])
+    return Response(json.dumps(donnees, ensure_ascii=False, indent=1), media_type="application/json", headers={
+        "Content-Disposition": f'attachment; filename="loopy-{u["nom"]}-donnees.json"'})
 
 
 @app.delete("/api/moi", status_code=204)
@@ -755,6 +788,9 @@ async def entetes(req: Request, appel):
     rep.headers.setdefault("X-Content-Type-Options", "nosniff")
     rep.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     rep.headers.setdefault("X-Frame-Options", "DENY")
+    rep.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)")
+    if config.COOKIE_SECURE:  # le navigateur refuse ensuite toute connexion non chiffrée au site
+        rep.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     if req.url.path.startswith("/api/"):
         rep.headers.setdefault("Cache-Control", "no-store")
     return rep

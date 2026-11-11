@@ -76,6 +76,11 @@ class EcranProfil(Screen):
             c.add_widget(w)
         changer()
         c.add_widget(Bouton("Mot de passe oublié", lambda *_: self.ouvrir("/mot-de-passe.html"), "discret", 48, 15))
+        c.add_widget(lab("Tes activités sont privées par défaut. Ce que Loopy garde et pourquoi : voir "
+                         "« Confidentialité et données » ; tu peux tout exporter ou supprimer à tout moment.", 14, BRUME,
+                         size_hint_y=None, height=dp(56)))
+        c.add_widget(Bouton("Confidentialité et données", lambda *_: self.ouvrir("/confidentialite.html"),
+                            "discret", 48, 15))
         self._reglages_app()
 
     def valider(self, *_):
@@ -152,8 +157,10 @@ class EcranProfil(Screen):
                              "dans le navigateur ; reviens ensuite ici.", 15, BRUME, size_hint_y=None, height=dp(62)))
             c.add_widget(Bouton("Relier mon compte Strava", self.relier_strava, "encre", 58, 18))
         c.add_widget(Bouton("Ouvrir mon espace sur le site", lambda *_: self.ouvrir("/espace.html"), "contour", 56, 17))
-        c.add_widget(lab("Photo de profil, abonnements et suppression du compte : sur le site.", 14, BRUME,
+        c.add_widget(lab("Abonnements, export de tes données et suppression du compte : sur le site.", 14, BRUME,
                          size_hint_y=None, height=dp(40)))
+        c.add_widget(Bouton("Confidentialité et données", lambda *_: self.ouvrir("/confidentialite.html"),
+                            "discret", 48, 15))
         self._reglages_app()
         c.add_widget(Bouton("Se déconnecter", self.deconnecter, "contour", 56, 17))
 

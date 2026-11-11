@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#F4EFE6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121A16" media="(prefers-color-scheme: dark)">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.min.css">
 <link rel="stylesheet" href="/assets/css/loopy.css">
 <style>
   .titre-page { padding: 40px 0 24px; }
@@ -46,8 +46,8 @@
   </div>
 </header>
 <main class="conteneur" id="vue"><p class="doux" style="padding:40px 0">Chargement…</p></main>
-<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p></div></footer>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p> <p><a href="/confidentialite.html">Confidentialité</a></p></div></footer>
+<script src="/assets/vendor/leaflet/leaflet.min.js"></script>
 <script type="module">
 import { api, moi, SPORTS, km, duree, rythme, date, echapper, toast } from "/assets/js/commun.js";
 import { carte, boucle, cadrer } from "/assets/js/carte.js";

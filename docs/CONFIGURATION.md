@@ -30,7 +30,8 @@ Aucun secret n'est écrit dans le code. Mets ces valeurs dans l'environnement du
 
 | Variable | Rôle | Défaut |
 |---|---|---|
-| `LOOPY_URL_PUBLIQUE` | Adresse publique du serveur, par exemple `https://loopy.example.org`. Sert aux liens envoyés par e-mail et au retour OAuth de Strava. En `https://`, les cookies sont marqués `Secure`. | `http://localhost:8000` |
+| `LOOPY_URL_PUBLIQUE` | Adresse publique du serveur, par exemple `https://loopy.example.org`. Sert aux liens envoyés par e-mail et au retour OAuth de Strava. En `https://`, les cookies sont marqués `Secure` et l'en-tête HSTS est envoyé. Sur Render, `RENDER_EXTERNAL_URL` sert si elle est absente. | `http://localhost:8000` |
+| `FORWARDED_ALLOW_IPS` | Variable lue par uvicorn. Derrière un proxy (Render), mettre `*` : sinon toutes les requêtes semblent venir du proxy et la limite de tentatives de connexion s'applique à tout le monde à la fois. | `127.0.0.1` |
 | `DATABASE_URL` | Adresse de la base **PostgreSQL**, par exemple `postgresql://utilisateur:motdepasse@hote/loopy?sslmode=require` (Neon, Supabase, Render…). Le schéma est créé au démarrage. Vide : base locale de développement (pgserver), **jamais en production**. | vide |
 | `LOOPY_CONNEXIONS` | Connexions ouvertes au plus vers la base (réserve partagée). Reste sous la limite de ton offre PostgreSQL. | `10` |
 | `LOOPY_DONNEES` | Développement seulement : dossier de la base locale. Le serveur n'écrit aucun fichier en production. | `serveur/donnees` |

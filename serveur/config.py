@@ -4,7 +4,9 @@ import os
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DONNEES = os.environ.get("LOOPY_DONNEES", os.path.join(RACINE, "serveur", "donnees"))
 DATABASE_URL = os.environ.get("DATABASE_URL", "")  # postgresql://… ; vide en développement (base locale)
-URL_PUBLIQUE = os.environ.get("LOOPY_URL_PUBLIQUE", "http://localhost:8000").rstrip("/")
+# RENDER_EXTERNAL_URL est fourni par Render : cookies « Secure » et liens d'e-mail justes sans rien configurer
+URL_PUBLIQUE = (os.environ.get("LOOPY_URL_PUBLIQUE") or os.environ.get("RENDER_EXTERNAL_URL")
+                or "http://localhost:8000").rstrip("/")
 COOKIE_SECURE = URL_PUBLIQUE.startswith("https://")
 STRAVA_ID = os.environ.get("STRAVA_CLIENT_ID", "")
 STRAVA_SECRET = os.environ.get("STRAVA_CLIENT_SECRET", "")

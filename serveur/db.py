@@ -76,3 +76,10 @@ def fermer():
 def initialiser():
     with reserve().connection() as con:
         con.execute(SCHEMA)
+        purger(con)
+
+
+def purger(con):
+    """RGPD (limitation de conservation) : sessions, liens de réinitialisation et états OAuth expirés."""
+    for t in ("sessions", "reinits", "etats_oauth"):
+        con.execute(f"DELETE FROM {t} WHERE expire < EXTRACT(EPOCH FROM now())")

@@ -96,7 +96,8 @@ def test_itineraires_favoris_gpx_et_partage(client):
 def test_activites_visibilite_et_vie_privee(client):
     ha, hb = compte(client, "alice"), compte(client, "bob")
     a = client.put("/api/moi/activites/20231114-221320", headers=ha, json=activite()).json()
-    assert a["visibilite"] == "abonnes"  # réglage par défaut du compte
+    assert a["visibilite"] == "prive"  # protection par défaut d'un nouveau compte (RGPD art. 25)
+    client.patch(f"/api/activites/{a['id']}", headers=ha, json={"visibilite": "abonnes"})
     assert client.put("/api/moi/activites/20231114-221320", headers=ha, json=activite()).json()["id"] == a["id"]
     assert client.get(f"/api/activites/{a['id']}", headers=hb).status_code == 404  # bob ne suit pas alice
     client.post("/api/utilisateurs/alice/abonnement", headers=hb)
@@ -135,6 +136,38 @@ def test_suppression_du_compte(client):
     assert client.delete("/api/moi", headers=ha).status_code == 204
     assert client.get("/api/utilisateurs/alice").status_code == 404
     assert client.get(f"/api/activites/{a['id']}").status_code == 404
+
+
+def test_export_des_donnees(client):
+    ha, hb = compte(client, "alice"), compte(client, "bob")
+    a = client.put("/api/moi/activites/x1", headers=ha, json=activite("public")).json()
+    client.post(f"/api/activites/{a['id']}/commentaires", headers=hb, json={"texte": "Bravo !"})
+    client.post("/api/utilisateurs/alice/abonnement", headers=hb)
+    r = client.get("/api/moi/export", headers=hb)
+    assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
+    d = r.json()
+    assert d["compte"]["email"] == "bob@exemple.fr" and d["abonnements"][0]["nom"] == "alice"
+    assert d["commentaires"][0]["texte"] == "Bravo !" and d["activites"] == []
+    assert "mdp" not in d["compte"] and "scrypt" not in r.text  # aucun secret
+    seg = client.get("/api/moi/export", headers=ha).json()["activites"][0]["segments"]
+    assert isinstance(seg, list) and len(seg[0]) == 60  # tracé complet, lisible
+    client.cookies.clear()
+    assert client.get("/api/moi/export").status_code == 401
+
+
+def test_purge_des_jetons_expires(client):
+    from serveur import db
+    compte(client)
+    with db.reserve().connection() as con:
+        con.execute("UPDATE sessions SET expire=1")
+        db.purger(con)
+        assert con.execute("SELECT COUNT(*) AS n FROM sessions").fetchone()["n"] == 0
+
+
+def test_entetes_de_securite(client, monkeypatch):
+    monkeypatch.setattr(config, "COOKIE_SECURE", True)
+    h = client.get("/").headers
+    assert h["x-frame-options"] == "DENY" and "max-age" in h["strict-transport-security"]
 
 
 def test_strava_non_configure(client, monkeypatch):

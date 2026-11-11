@@ -2,7 +2,7 @@
 
 Le site présente l'app. Il permet aussi d'utiliser Loopy depuis un navigateur : créer une boucle, gérer son compte, retrouver ses parcours et ses sorties, rejoindre la communauté. Il est servi par le serveur Loopy (`serveur/app.py`), sur la même origine que l'API : **même compte que l'app**.
 
-Il n'y a ni compilation ni dépendances npm. Pages HTML, une feuille de style et des modules JavaScript natifs. Leaflet 1.9.4 vient de cdnjs, en version figée.
+Il n'y a ni compilation ni dépendances npm. Pages HTML, une feuille de style et des modules JavaScript natifs. Leaflet 1.9.4 est copié dans assets/vendor/leaflet (pas de CDN : aucune adresse IP de visiteur envoyée à un tiers).
 
 | Fichier | Contenu |
 |---|---|

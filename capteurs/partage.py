@@ -3,14 +3,17 @@
 Android 10+ : le fichier est écrit dans Téléchargements/Loopy par le MediaStore (aucune autorisation demandée,
 visible dans l'appli Fichiers et proposé par le sélecteur de fichiers du navigateur, pour l'import sur
 strava.com). Un même fichier retéléchargé remplace le précédent au lieu de créer « nom (1).gpx ».
-Partager ouvre le menu natif d'Android (messagerie, Drive, une autre app…) avec ce fichier.
+Partager ouvre le menu natif d'Android (Komoot, Drive, messagerie…) avec ce fichier. Dans les deux cas une
+notification « GPX téléchargé » apparaît : la toucher ouvre le fichier dans l'appli choisie.
 Sur PC : un dossier local (exports)."""
 import os
+import zlib
 
 from kivy.utils import platform
 
 DOSSIER = "Download/Loopy/"
 TYPE = "application/gpx+xml"
+CANAL = "loopy_fichiers"
 
 
 def _pc(nom_fichier, texte, dossier_pc):
@@ -59,6 +62,37 @@ def _ecrire_android(nom_fichier, texte):
     return uri
 
 
+def _notifier(nom_fichier, uri):
+    """Notification système « GPX téléchargé » ; la toucher propose les applis qui ouvrent le fichier.
+    Notifications refusées (Android 13+) : Android ne l'affiche pas, le message dans l'app suffit."""
+    try:
+        from jnius import autoclass, cast
+        from capteurs.android import activite, chaine, version_sdk
+        act, sdk = activite(), version_sdk()
+        nm = cast("android.app.NotificationManager", act.getSystemService("notification"))
+        if sdk >= 26:
+            NM = autoclass("android.app.NotificationManager")
+            nm.createNotificationChannel(autoclass("android.app.NotificationChannel")(
+                CANAL, chaine("Fichiers téléchargés"), NM.IMPORTANCE_DEFAULT))
+        Intent, PI = autoclass("android.content.Intent"), autoclass("android.app.PendingIntent")
+        voir = Intent(Intent.ACTION_VIEW)
+        voir.setDataAndType(uri, TYPE)
+        voir.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        ouvrir = Intent.createChooser(voir, chaine("Ouvrir le GPX avec"))  # garde l'autorisation de lecture
+        num = 1000 + zlib.crc32(nom_fichier.encode()) % 100000  # même fichier : même notification, remplacée
+        pi = PI.getActivity(act, num, ouvrir, PI.FLAG_IMMUTABLE | PI.FLAG_UPDATE_CURRENT)
+        B = autoclass("android.app.Notification$Builder")
+        b = B(act, CANAL) if sdk >= 26 else B(act)
+        b.setContentTitle(cast("java.lang.CharSequence", chaine("GPX téléchargé")))
+        b.setContentText(cast("java.lang.CharSequence", chaine(f"{nom_fichier} · touche pour l'ouvrir")))
+        b.setSmallIcon(act.getApplicationInfo().icon)
+        b.setContentIntent(pi)
+        b.setAutoCancel(True)
+        nm.notify(num, b.build())
+    except Exception as err:  # le fichier est bien enregistré : une notification manquée ne doit pas l'annuler
+        print(f"[Loopy] notification GPX impossible : {err}", flush=True)
+
+
 def telecharger(nom_fichier, texte, dossier_pc):
     """Enregistre le fichier sur l'appareil. Renvoie le message à afficher."""
     if platform != "android":
@@ -66,7 +100,7 @@ def telecharger(nom_fichier, texte, dossier_pc):
     from capteurs.android import version_sdk
     if version_sdk() < 29:
         return "Le téléchargement direct demande Android 10 ou plus : utilise Partager"
-    _ecrire_android(nom_fichier, texte)
+    _notifier(nom_fichier, _ecrire_android(nom_fichier, texte))
     return f"Téléchargé : Téléchargements/Loopy/{nom_fichier}"
 
 
@@ -79,13 +113,14 @@ def partager(nom_fichier, texte, dossier_pc):
     if version_sdk() < 29:
         return "Le partage de fichier demande Android 10 ou plus"
     uri = _ecrire_android(nom_fichier, texte)
+    _notifier(nom_fichier, uri)
     Intent = autoclass("android.content.Intent")
     envoi = Intent(Intent.ACTION_SEND)
     envoi.setType(TYPE)
     envoi.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
     envoi.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     activite().startActivity(Intent.createChooser(envoi, chaine("Partager le GPX")))
-    return "Choisis où envoyer le fichier (il est aussi dans Téléchargements/Loopy)"
+    return "Choisis où l'envoyer (Komoot…). Il est aussi dans Téléchargements/Loopy"
 
 
 def exporter(nom_fichier, texte, dossier_pc):

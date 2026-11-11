@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#F4EFE6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121A16" media="(prefers-color-scheme: dark)">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.min.css">
 <link rel="stylesheet" href="/assets/css/loopy.css">
 <style>
   .tete { padding: 40px 0 8px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
@@ -71,9 +71,9 @@
   </nav>
   <div id="vue" aria-live="polite"></div>
 </main>
-<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p>
+<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p> <p><a href="/confidentialite.html">Confidentialité</a></p>
   <button class="bouton discret petit" id="deconnexion" type="button">Se déconnecter</button></div></footer>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/assets/vendor/leaflet/leaflet.min.js"></script>
 <script type="module">
 import { api, exigerConnexion, SPORTS, ICONES, km, duree, rythme, date, echapper, barre, VOIES, gpxItineraire, nomItineraire, telecharger, toast } from "/assets/js/commun.js";
 const $ = (s) => document.querySelector(s), vue = $("#vue");
@@ -262,6 +262,9 @@ async function profil() {
       : `<p>Relie ton compte pour envoyer tes activités terminées sur Strava. Loopy demande seulement le droit de créer des activités et de lire celles qu'il envoie.</p>
         <button class="bouton" type="button" id="strava-on" style="margin-top:12px">Relier mon compte Strava</button>`}
   </section>
+  <section class="profil-form" style="margin-top:48px"><h2 style="font-size:2rem;margin-bottom:12px">Mes données</h2>
+    <p class="doux">Récupère tout ce que Loopy garde sur toi (profil, boucles, activités et leurs tracés, abonnements, commentaires) dans un fichier JSON. <a href="/confidentialite.html">Ce que Loopy fait de tes données</a>.</p>
+    <a class="bouton second" href="/api/moi/export" download style="margin-top:12px">Télécharger mes données</a></section>
   <section class="profil-form" style="margin-top:48px"><h2 style="font-size:2rem;margin-bottom:12px">Supprimer mon compte</h2>
     <p class="doux">Ton profil, tes boucles, tes activités, tes j'aime et tes commentaires seront effacés. C'est définitif.</p>
     <button class="bouton danger" type="button" id="suppr" style="margin-top:12px">Supprimer mon compte</button></section>`;

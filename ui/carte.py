@@ -83,6 +83,19 @@ class Tuiles:
             c.redessiner_tuiles()
 
 
+def chevrons(pts, pas):
+    """(x, y, direction en radians) tous les « pas » le long d'une polyligne, le premier à pas/2 du départ."""
+    out, reste = [], pas / 2
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+        d = math.hypot(x2 - x1, y2 - y1)
+        while d and reste <= d:
+            k = reste / d
+            out.append((x1 + (x2 - x1) * k, y1 + (y2 - y1) * k, math.atan2(y2 - y1, x2 - x1)))
+            reste += pas
+        reste -= d
+    return out
+
+
 def avec_zoom(trace, on_mode=None):
     """La carte + gros boutons + / − (et le bouton d'orientation), et l'attribution OpenStreetMap."""
     f = FloatLayout()
@@ -275,6 +288,13 @@ class Trace(StencilView):
             n = max(2, int(len(self.coords) * self.revele))
             ligne(self.coords[:n], FOND, 8)  # liseré : la boucle se détache des tuiles
             ligne(self.coords[:n], TRACE, 5)
+            if self.revele >= 1:  # sens de parcours : petits chevrons clairs dans le tracé, tous les ~90 px
+                self.g_dyn.add(Color(*FOND))
+                for x, y, a in chevrons([self.mondial(*p) for p in self.coords], 90 * u):
+                    c, s = math.cos(a) * u, math.sin(a) * u
+                    self.g_dyn.add(Line(points=[x - 2 * c - 2.6 * s, y - 2 * s + 2.6 * c, x + 2 * c, y + 2 * s,
+                                                x - 2 * c + 2.6 * s, y - 2 * s - 2.6 * c], width=1.2 * u, cap="round",
+                                        joint="round"))
         if len(self.boucle_faite) >= 2:  # la partie de la boucle déjà faite s'efface…
             ligne(self.boucle_faite, FOND, 8)
             ligne(self.boucle_faite, TRACE_PALE, 5)

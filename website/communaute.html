@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#F4EFE6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121A16" media="(prefers-color-scheme: dark)">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.min.css">
 <link rel="stylesheet" href="/assets/css/loopy.css">
 <style>
   .titre-page { padding: 40px 0 24px; }
@@ -58,8 +58,8 @@
   <h2 class="section-titre">Boucles partagées</h2><div class="mosaique" id="parcours"></div>
   <h2 class="section-titre">Sorties récentes</h2><div class="mosaique" id="activites"></div>
 </main>
-<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p></div></footer>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<footer class="pied"><div class="conteneur"><p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p> <p><a href="/confidentialite.html">Confidentialité</a></p></div></footer>
+<script src="/assets/vendor/leaflet/leaflet.min.js"></script>
 <script type="module">
 import { api, echapper } from "/assets/js/commun.js";
 import { tuileActivite, tuileItineraire, avatar } from "/assets/js/apercu.js";

@@ -92,6 +92,15 @@ p { margin: 0; max-width: 62ch; }
 .bouton:disabled, .bouton[aria-disabled="true"] { opacity: .45; cursor: not-allowed; transform: none; }
 .rangee { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 
+/* un appui rapide répété (+ / −) ne zoome plus la page ; le pincement pour zoomer reste possible */
+a, button, input, select, label, .bouton { touch-action: manipulation; }
+/* flèche de sens sur les cartes : chevron couleur du tracé, cerné de clair pour se détacher du trait */
+.fleche svg { width: 16px; height: 16px; display: block; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.fleche path:first-child { stroke: var(--fond); stroke-width: 5.5; }
+.fleche path:last-child { stroke: var(--trace); stroke-width: 2.6; }
+
+.lien { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline; cursor: pointer; }
+
 /* --- formulaires --- */
 label { font-weight: 700; display: block; margin-bottom: 6px; }
 .champ { margin-bottom: 18px; }

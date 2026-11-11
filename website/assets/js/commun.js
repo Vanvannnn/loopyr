@@ -124,6 +124,19 @@ export function telecharger(nom, texte, type = "application/gpx+xml") {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+// Sur téléphone, le menu de partage natif (Komoot, Fichiers, Drive, messagerie…) ; sinon téléchargement.
+// Chrome Android ne partage pas les .gpx (types limités) : il télécharge, et sa propre notification ouvre le fichier.
+export const peutPartager = matchMedia("(pointer: coarse)").matches &&
+  !!navigator.canShare?.({ files: [new File(["x"], "x.gpx", { type: "application/gpx+xml" })] });
+export async function envoyer(nom, texte, type = "application/gpx+xml") {
+  if (peutPartager) {
+    try { await navigator.share({ files: [new File([texte], nom, { type })] }); return; }
+    catch (e) { if (e.name === "AbortError") return; }  // fermé par l'utilisateur : rien à faire
+  }
+  telecharger(nom, texte, type);
+  toast(`✅ ${nom} est dans tes Téléchargements`, 4500);
+}
+
 // pictogrammes (trait 2 px, même grille 24 px)
 export const ICONES = {
   velo: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 9h6l3.5 7.5M9 9 12 16.5h-2M14 6h2.5l-1.5 3"/></svg>',

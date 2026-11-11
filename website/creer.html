@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#F4EFE6" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121A16" media="(prefers-color-scheme: dark)">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.min.css">
 <link rel="stylesheet" href="/assets/css/loopy.css">
 <style>
   .atelier { display: grid; grid-template-columns: minmax(320px, 400px) 1fr; min-height: calc(100vh - 65px); }
@@ -23,7 +23,7 @@
   .sports { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .sport { text-align: left; border: 2px solid var(--fond-3); background: var(--fond); color: var(--encre); border-radius: var(--r);
     padding: 16px; cursor: pointer; font: inherit; }
-  .sport svg { width: 34px; height: 34px; margin-bottom: 10px; }
+  .sport .emoji { font-size: 2.2rem; line-height: 1; margin-bottom: 10px; }
   .sport strong { display: block; font: 800 1.6rem/1 var(--chiffres); margin-bottom: 6px; }
   .sport span { font-size: .9rem; color: var(--brume); display: block; line-height: 1.35; }
   .sport[aria-pressed="true"] { border-color: var(--encre); box-shadow: inset 0 0 0 1px var(--encre); background: var(--fond-2); }
@@ -37,8 +37,6 @@
   .puces button[aria-pressed="true"] { border-color: var(--encre); background: var(--encre); color: var(--fond); }
   .cartezone { position: relative; }
   .cartezone .carte { position: absolute; inset: 0; border-radius: 0; }
-  .consigne { position: absolute; z-index: 500; left: 50%; top: 16px; transform: translateX(-50%); background: var(--encre); color: var(--fond);
-    padding: 10px 16px; border-radius: var(--r); font-weight: 700; max-width: calc(100% - 32px); }
   .props { display: grid; gap: 10px; margin: 14px 0 18px; }
   .prop { text-align: left; border: 2px solid var(--fond-3); background: var(--fond); color: var(--encre); border-radius: var(--r);
     padding: 12px 14px; cursor: pointer; font: inherit; display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; align-items: baseline; }
@@ -58,6 +56,7 @@
     .atelier { grid-template-columns: 1fr; }
     .panneau { border-right: 0; order: 2; }
     .cartezone { order: 1; height: 52vh; position: sticky; top: 65px; z-index: 1; }
+    .etape { scroll-margin-top: calc(65px + 52vh + 12px); }
   }
 </style>
 </head>
@@ -83,15 +82,15 @@
     <section class="etape" aria-labelledby="t-sport">
       <h2 id="t-sport">Tu pars comment ?</h2>
       <div class="sports">
-        <button type="button" class="sport" data-sport="velo" aria-pressed="false"><span data-icone="velo"></span><strong>Je pars à vélo</strong>
+        <button type="button" class="sport" data-sport="velo" aria-pressed="false"><span class="emoji" aria-hidden="true">🚲</span><strong>Je pars à vélo</strong>
           <span>Routes revêtues et pistes cyclables, pour les distances plus longues.</span></button>
-        <button type="button" class="sport" data-sport="course" aria-pressed="false"><span data-icone="course"></span><strong>Je pars courir</strong>
+        <button type="button" class="sport" data-sport="course" aria-pressed="false"><span class="emoji" aria-hidden="true">🏃</span><strong>Je pars courir</strong>
           <span>Chemins piétons, parcs et espaces agréables pour courir.</span></button>
       </div>
     </section>
 
     <section class="etape" id="e-distance" aria-labelledby="t-distance" hidden>
-      <h2 id="t-distance">Quelle distance souhaites-tu parcourir ?</h2>
+      <h2 id="t-distance"><span aria-hidden="true">📏</span> Quelle distance souhaites-tu parcourir ?</h2>
       <div class="distance">
         <button type="button" id="moins" aria-label="Un kilomètre de moins">−</button>
         <label class="cache" for="km">Distance en kilomètres</label>
@@ -100,7 +99,7 @@
       </div>
       <p class="aide" id="km-aide"></p>
       <div class="puces" id="suggestions" role="group" aria-label="Distances suggérées"></div>
-      <h2 style="font-size:1.2rem;margin:22px 0 10px">Relief</h2>
+      <h2 style="font-size:1.2rem;margin:22px 0 10px"><span aria-hidden="true">⛰️</span> Relief</h2>
       <div class="segmente" role="group" aria-label="Relief" id="relief">
         <button type="button" data-v="" aria-pressed="true">Peu importe</button>
         <button type="button" data-v="plat" aria-pressed="false">Plutôt plat</button>
@@ -109,12 +108,11 @@
     </section>
 
     <section class="etape" id="e-depart" aria-labelledby="t-depart" hidden>
-      <h2 id="t-depart">D'où pars-tu ?</h2>
+      <h2 id="t-depart"><span aria-hidden="true">📍</span> D'où pars-tu ?</h2>
       <div class="rangee">
         <button type="button" class="bouton second petit" id="ma-position">Utiliser ma position</button>
-        <button type="button" class="bouton discret petit" id="sur-carte">Choisir sur la carte</button>
       </div>
-      <p class="aide" id="etat-depart" aria-live="polite">Le départ sera ta position actuelle.</p>
+      <p class="aide" id="etat-depart" aria-live="polite">Le départ sera ta position actuelle. Tu peux aussi toucher la carte.</p>
       <form class="recherche" id="form-lieu" role="search">
         <label class="cache" for="lieu">Chercher une ville ou une adresse</label>
         <input id="lieu" type="search" placeholder="Ou cherche une ville, une adresse" autocomplete="off">
@@ -128,17 +126,18 @@
   </div>
   <div class="cartezone">
     <div class="carte" id="carte" role="region" aria-label="Carte"></div>
-    <p class="consigne" id="consigne" hidden>Touche la carte pour placer ton départ</p>
+    
   </div>
 </main>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/assets/vendor/leaflet/leaflet.min.js"></script>
 <script type="module">
-import { api, moi, SPORTS, ICONES, km, barre, VOIES, REVETEMENTS, gpxItineraire, nomItineraire, telecharger, toast, echapper } from "/assets/js/commun.js";
+import { api, moi, SPORTS, km, barre, VOIES, REVETEMENTS, gpxItineraire, nomItineraire, envoyer, telecharger, peutPartager, mouvementReduit, toast, echapper } from "/assets/js/commun.js";
 import { carte, boucle, depart as pointDepart, cadrer } from "/assets/js/carte.js";
 const L = window.L, $ = (s) => document.querySelector(s);
-document.querySelectorAll("[data-icone]").forEach((e) => { e.innerHTML = ICONES[e.dataset.icone]; });
+// après une action, la suite vient à l'écran toute seule (sans animation si l'utilisateur les a réduites)
+const montrer = (el) => el.scrollIntoView({ behavior: mouvementReduit ? "auto" : "smooth", block: "start" });
 
-const etat = { sport: null, relief: "", depart: null, choisir: false, res: null, choix: 0, calques: [] };
+const etat = { sport: null, relief: "", depart: null, res: null, choix: 0, calques: [] };
 const m = carte("carte");
 let marqueur = null, zone = null;
 
@@ -152,6 +151,7 @@ document.querySelectorAll(".sport").forEach((b) => b.addEventListener("click", (
   $("#suggestions").innerHTML = s.suggestions.map((v) => `<button type="button" data-km="${v}">${v} km</button>`).join("");
   majPuces();
   $("#e-distance").hidden = $("#e-depart").hidden = false;
+  montrer($("#e-distance"));
   if (!etat.depart) localiser(false);
 }));
 const distance = () => parseFloat(String($("#km").value).replace(",", "."));
@@ -193,11 +193,9 @@ function localiser(insister = true) {
     }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 $("#ma-position").addEventListener("click", () => localiser(true));
-$("#sur-carte").addEventListener("click", () => { etat.choisir = true; $("#consigne").hidden = false; });
-m.on("click", (e) => {
-  if (!etat.choisir) return;
-  etat.choisir = false; $("#consigne").hidden = true;
-  placer([e.latlng.lat, e.latlng.lng], "Départ : le point choisi sur la carte.");
+m.on("click", (e) => {  // toucher la carte = choisir le départ (les boucles d'un autre départ sont retirées)
+  if (etat.res) { etat.res = null; etat.calques.forEach((c) => c.remove()); etat.calques = []; zone?.remove(); $("#e-resultat").hidden = true; }
+  placer([e.latlng.lat, e.latlng.lng], "Départ : le point touché sur la carte.");
 });
 $("#form-lieu").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -216,6 +214,7 @@ $("#generer").addEventListener("click", async () => {
   const s = SPORTS[etat.sport], d = distance();
   const res = $("#e-resultat");
   res.hidden = false;
+  montrer(res);
   if (!(d >= s.mini && d <= s.maxi)) { res.innerHTML = `<p class="message erreur">Choisis une distance entre ${s.mini} et ${s.maxi} km.</p>`; return; }
   if (!etat.depart) { res.innerHTML = `<p class="message erreur">Il faut un point de départ : ta position, un point sur la carte ou un lieu cherché.</p>`; return; }
   $("#generer").disabled = true;
@@ -243,11 +242,11 @@ function afficher() {
   const ecart = Math.round((p.distance - r.cible) / r.cible * 100);
   const rv = p.resume_voies;
   res.innerHTML = `
-    <h2>${r.propositions.length > 1 ? `${r.propositions.length} boucles trouvées` : "Une boucle trouvée"}</h2>
+    <h2><span aria-hidden="true">🗺️</span> ${r.propositions.length > 1 ? `${r.propositions.length} boucles trouvées` : "Une boucle trouvée"}</h2>
     ${r.message ? `<p class="message">${echapper(r.message)}</p>` : ""}
     <div class="props" role="group" aria-label="Choisir une boucle">${r.propositions.map((q, i) => `
       <button type="button" class="prop" data-i="${i}" aria-pressed="${i === etat.choix}"><span class="chiffre">${km(q.distance)} km</span>
-        <strong>Boucle ${String.fromCharCode(65 + i)}</strong><span class="doux petit">${Math.round(q.montee)} m de D+, ${Math.round(q.qualite * 100)} % sur des voies adaptées</span></button>`).join("")}</div>
+        <strong>Boucle ${String.fromCharCode(65 + i)}</strong><span class="doux petit">⛰️ ${Math.round(q.montee)} m de D+, ${Math.round(q.qualite * 100)} % sur des voies adaptées</span></button>`).join("")}</div>
     <div class="details">
       <dl>
         <dt>Distance demandée</dt><dd>${km(r.cible)} km</dd>
@@ -261,13 +260,16 @@ function afficher() {
       <p class="aide">Revêtement indiqué dans OpenStreetMap sur ${Math.round(rv.surface_connue * 100)} % du tracé, déduit du type de route sur ${Math.round(rv.surface_deduite * 100)} %, inconnu ailleurs.</p>
     </div>
     <div class="rangee" style="margin-top:22px">
-      <button type="button" class="bouton" id="gpx">Télécharger l'itinéraire GPX</button>
-      <button type="button" class="bouton second" id="garder">Enregistrer</button>
-      <button type="button" class="bouton discret" id="autre">Régénérer</button>
+      <button type="button" class="bouton" id="gpx">${peutPartager ? "📤 Envoyer le GPX" : "⬇️ Télécharger le GPX"}</button>
+      <button type="button" class="bouton second" id="garder">⭐ Enregistrer</button>
+      <button type="button" class="bouton discret" id="autre">🔁 Autres boucles</button>
     </div>
-    <p class="aide">Le GPX contient le tracé prévu, sans durée ni vitesse. L'activité que tu feras s'enregistre avec l'app Loopy.</p>`;
+    <p class="aide">${peutPartager ? `Choisis Komoot, Fichiers ou une autre appli dans le menu qui s'ouvre. <button type="button" class="lien" id="gpx-fichier">Ou télécharger le fichier</button>.` : ""}
+      Le GPX contient le tracé prévu, sans durée ni vitesse : importe-le dans ton appli de course ou ton compteur pour le suivre.</p>`;
   res.querySelectorAll(".prop").forEach((b) => b.addEventListener("click", () => { etat.choix = +b.dataset.i; afficher(); }));
-  $("#gpx").addEventListener("click", () => telecharger(nomItineraire(p.distance, r.sport), gpxItineraire(p.coords, r.sport, p.distance, p.montee, p.ele)));
+  const fichier = () => [nomItineraire(p.distance, r.sport), gpxItineraire(p.coords, r.sport, p.distance, p.montee, p.ele)];
+  $("#gpx").addEventListener("click", () => envoyer(...fichier()));
+  $("#gpx-fichier")?.addEventListener("click", () => { telecharger(...fichier()); toast("✅ GPX téléchargé"); });
   $("#autre").addEventListener("click", () => $("#generer").click());
   $("#garder").addEventListener("click", async () => {
     if (!(await moi())) { location.href = "/connexion.html?suite=/creer.html"; return; }
@@ -275,7 +277,7 @@ function afficher() {
       await api("/api/itineraires", { methode: "POST", corps: { nom: `Boucle ${km(p.distance)} km (${SPORTS[r.sport].court})`, sport: r.sport,
         distance: p.distance, montee: p.montee, coords: p.coords, ele: p.ele, resume_voies: p.resume_voies } });
       toast("Boucle enregistrée dans ton espace");
-      $("#garder").disabled = true; $("#garder").textContent = "Enregistrée";
+      $("#garder").disabled = true; $("#garder").textContent = "✅ Enregistrée";
     } catch (err) { toast(err.message); }
   });
 }

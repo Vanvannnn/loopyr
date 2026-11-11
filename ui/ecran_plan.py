@@ -98,7 +98,7 @@ class EcranPlan(Screen):
         self.voies = Repartition()
         self.l_revet = lab("", 14, BRUME, size_hint_y=None, height=dp(36))
         ligne = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(8))
-        self.btn_gpx = Bouton("GPX", self.gpx, "contour", 52, 16)
+        self.btn_gpx = Bouton("Envoyer GPX", self.gpx, "contour", 52, 16)
         self.btn_garder = Bouton("Enregistrer", self.garder, "contour", 52, 16)
         self.btn_autre = Bouton("Autres boucles", self.lancer, "contour", 52, 16)
         for b in (self.btn_gpx, self.btn_garder, self.btn_autre):
@@ -273,21 +273,17 @@ class EcranPlan(Screen):
 
     # --- actions ---
     def gpx(self, *_):
-        """GPX de l'itinéraire (le tracé prévu, sans heure ni performance) : télécharger ou partager."""
-        from ui.widgets import choix
-        if self.proposition():
-            choix("GPX du parcours", "Le tracé prévu, pour un compteur GPS, Strava (itinéraire) ou une autre app.",
-                  [("Télécharger", lambda: self._gpx(False), "signal"), ("Partager", lambda: self._gpx(True), "contour")],
-                  hauteur=dp(260))
-
-    def _gpx(self, partager):
+        """GPX de l'itinéraire (le tracé prévu, sans heure ni performance) : enregistré dans Téléchargements/Loopy
+        (avec une notification), puis le menu de partage pour l'envoyer à Komoot, un compteur, etc."""
         p = self.proposition()
+        if not p:
+            return
         nom = nom_itineraire(p["distance"], p["sport"], haversine(p["coords"][0], p["coords"][-1]) > 300)
         texte = gpx_itineraire(p["coords"], p["sport"], p["distance"], p["montee"], p.get("ele"), p["nom"])
         try:
-            self.l_details.text = (self.app.partager_gpx if partager else self.app.exporter_gpx)(nom, texte)
+            self.l_details.text = self.app.partager_gpx(nom, texte)
         except Exception as err:
-            self.l_details.text = f"{'Partage' if partager else 'Téléchargement'} impossible : {err}"
+            self.l_details.text = f"Envoi impossible : {err}"
 
     def garder(self, *_):
         if self.itineraire:  # boucle déjà enregistrée : le bouton bascule « favorite »
