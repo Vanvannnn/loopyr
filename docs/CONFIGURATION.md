@@ -10,6 +10,9 @@ python3 -m venv .venv
 # sans DATABASE_URL, un PostgreSQL local est lancé tout seul (pgserver) dans serveur/donnees/postgres
 .venv/bin/uvicorn serveur.app:app --reload
 
+# ou sur la vraie base Neon (adresse tirée par `neon deploy` dans .env.local, ignoré par git)
+set -a; . ./.env.local; set +a; .venv/bin/uvicorn serveur.app:app --reload
+
 # l'app (autre terminal) : elle parle au serveur de http://localhost:8000 par défaut
 .venv/bin/python main.py
 

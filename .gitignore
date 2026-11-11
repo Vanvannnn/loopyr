@@ -9,3 +9,6 @@ elev_cache.json
 *.tmp
 serveur/donnees/
 .env
+.neon
+node_modules/
+.env.local
