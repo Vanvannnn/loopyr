@@ -22,6 +22,8 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE,ACCESS_FINE_LOCATION,ACCESS_
 android.api = 33
 android.minapi = 24
 android.archs = arm64-v8a
+# java/ : petites classes Java (écoute de la boussole sans rappel vers Python)
+android.add_src = java
 android.accept_sdk_license = True
 
 [buildozer]
