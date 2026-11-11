@@ -1,10 +1,9 @@
-"""Fichiers GPX : téléchargement direct sur le téléphone, et partage, deux actions indépendantes.
+"""Fichiers GPX : téléchargement direct sur le téléphone.
 
 Android 10+ : le fichier est écrit dans Téléchargements/Loopy par le MediaStore (aucune autorisation demandée,
 visible dans l'appli Fichiers et proposé par le sélecteur de fichiers du navigateur, pour l'import sur
 strava.com). Un même fichier retéléchargé remplace le précédent au lieu de créer « nom (1).gpx ».
-Partager ouvre le menu natif d'Android (Komoot, Drive, messagerie…) avec ce fichier. Dans les deux cas une
-notification « GPX téléchargé » apparaît : la toucher ouvre le fichier dans l'appli choisie.
+Une notification « GPX téléchargé » suit : la toucher ouvre le fichier dans l'appli choisie (Komoot, un compteur…).
 Sur PC : un dossier local (exports)."""
 import os
 import zlib
@@ -99,28 +98,9 @@ def telecharger(nom_fichier, texte, dossier_pc):
         return f"GPX enregistré : {_pc(nom_fichier, texte, dossier_pc)}"
     from capteurs.android import version_sdk
     if version_sdk() < 29:
-        return "Le téléchargement direct demande Android 10 ou plus : utilise Partager"
+        return "Le téléchargement du GPX demande Android 10 ou plus"
     _notifier(nom_fichier, _ecrire_android(nom_fichier, texte))
     return f"Téléchargé : Téléchargements/Loopy/{nom_fichier}"
-
-
-def partager(nom_fichier, texte, dossier_pc):
-    """Ouvre le menu de partage d'Android avec le fichier. Renvoie le message à afficher."""
-    if platform != "android":
-        return f"Partage disponible sur le téléphone. Fichier : {_pc(nom_fichier, texte, dossier_pc)}"
-    from jnius import autoclass, cast
-    from capteurs.android import activite, chaine, version_sdk
-    if version_sdk() < 29:
-        return "Le partage de fichier demande Android 10 ou plus"
-    uri = _ecrire_android(nom_fichier, texte)
-    _notifier(nom_fichier, uri)
-    Intent = autoclass("android.content.Intent")
-    envoi = Intent(Intent.ACTION_SEND)
-    envoi.setType(TYPE)
-    envoi.putExtra(Intent.EXTRA_STREAM, cast("android.os.Parcelable", uri))
-    envoi.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    activite().startActivity(Intent.createChooser(envoi, chaine("Partager le GPX")))
-    return "Choisis où l'envoyer (Komoot…). Il est aussi dans Téléchargements/Loopy"
 
 
 def exporter(nom_fichier, texte, dossier_pc):

@@ -1,5 +1,6 @@
 """Accueil (la carte autour de toi, ta semaine) puis la création d'une boucle en deux gestes :
 le sport (vélo ou course), puis la distance et le départ."""
+import os
 import threading
 import time
 
@@ -7,6 +8,7 @@ from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.image import Image
 from kivy.uix.screenmanager import Screen
 from kivy.uix.widget import Widget
 
@@ -18,6 +20,7 @@ from ui.widgets import (BRUME, FOND, FOND_2, MARQUE, SIGNAL, Bouton, Feuille, Pa
                         champ, echelle, fond, lab, liste_defilante, nombre, titre_ecran, unite)
 
 MA_POSITION, SUR_LA_CARTE = "gps", "carte"
+EMOJIS = os.path.join(os.path.dirname(__file__), "emoji")
 TEXTES = {
     "velo": ("Je pars à vélo", "Crée une boucle adaptée au cyclisme, aux distances plus longues et aux routes et "
                                "pistes cyclables adaptées."),
@@ -109,6 +112,9 @@ class CarteSport(ButtonBehavior, BoxLayout):
         echelle(self)
         self._c = fond(self, FOND_2, dp(18))
         self.add_widget(Widget())
+        # émoji en image (Noto Emoji, Apache 2.0) : la police de Kivy n'affiche pas les émojis couleur
+        self.add_widget(Image(source=os.path.join(EMOJIS, f"{sport}.png"), size_hint=(None, None), size=(dp(48), dp(48)),
+                              fit_mode="contain"))
         self.add_widget(lab(titre, 40, gras=True, chiffres=True, size_hint_y=None, height=dp(52)))
         self.add_widget(lab(texte, 16, BRUME, size_hint_y=None, height=dp(66), valign="top"))
         self.bind(state=lambda *_: setattr(self._c, "rgba", widgets.FOND_2 if self.state == "normal" else

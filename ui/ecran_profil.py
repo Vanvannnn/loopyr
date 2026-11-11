@@ -284,7 +284,7 @@ class EcranDetail(Screen):
         self.visibilite = Segmente(VISIBILITES, "abonnes", hauteur=46)
         self.visibilite.bind(choix=self.changer_visibilite)
         gpx_l = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
-        self.btn_gpx = Bouton("Envoyer le GPX", self.partager, "encre", 56, 16)  # enregistré + menu de partage
+        self.btn_gpx = Bouton("GPX", self.exporter, "encre", 56, 16)  # téléchargement direct + notification
         gpx_l.add_widget(self.btn_gpx)
         bas = BoxLayout(size_hint_y=None, height=dp(56), spacing=dp(8))
         self.btn_strava = Bouton("Importer sur Strava", self.strava, "contour", 56, 15)
@@ -357,13 +357,6 @@ class EcranDetail(Screen):
         except Exception as err:
             self.l_info.text = f"Téléchargement impossible : {err}"
             return False
-
-    def partager(self, *_):
-        a = self.act
-        try:
-            self.l_info.text = self.app.partager_gpx(f"loopy-{a['id']}.gpx", gpx(a))
-        except Exception as err:
-            self.l_info.text = f"Partage impossible : {err}"
 
     def modifier(self, *_):
         """Nom, ressenti et description, modifiables à tout moment."""

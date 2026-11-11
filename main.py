@@ -12,7 +12,7 @@ from kivy.uix.screenmanager import ScreenManager, SlideTransition
 from kivy.utils import platform
 
 from boucles import BRouter
-from capteurs.partage import partager, telecharger
+from capteurs.partage import telecharger
 from compte import Compte, ErreurCompte
 from geo import Cap
 from journal import Journal
@@ -229,9 +229,6 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
     def exporter_gpx(self, nom, texte):
         """Téléchargement direct dans Téléchargements/Loopy (sans passer par le partage)."""
         return telecharger(nom, texte, os.path.join(self.user_data_dir, "exports"))
-
-    def partager_gpx(self, nom, texte):
-        return partager(nom, texte, os.path.join(self.user_data_dir, "exports"))
 
     # --- synchronisation avec le compte (en arrière-plan ; tout reste local si elle échoue) ---
     def _fond(self, travail):

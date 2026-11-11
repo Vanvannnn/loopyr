@@ -86,6 +86,8 @@ class Tuiles:
 def chevrons(pts, pas):
     """(x, y, direction en radians) tous les « pas » le long d'une polyligne, le premier à pas/2 du départ."""
     out, reste = [], pas / 2
+    if not pas > 0:  # un pas nul ou négatif ne ferait jamais avancer la boucle
+        return out
     for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
         d = math.hypot(x2 - x1, y2 - y1)
         while d and reste <= d:
@@ -203,7 +205,9 @@ class Trace(StencilView):
             else:
                 c = self.mondial(*self.reference())
                 xs, ys = [c[0] - self.rayon_vue, c[0] + self.rayon_vue], [c[1] - self.rayon_vue, c[1] + self.rayon_vue]
-            base = min((self.width - 40) / max(max(xs) - min(xs), 1), (self.height - 40) / max(max(ys) - min(ys), 1))
+            # max(…, 10) : avant sa mise en page, la carte mesure 100 × 34 px ; sans plancher, l'échelle devenait négative
+            base = min(max(self.width - 40, 10) / max(max(xs) - min(xs), 1),
+                       max(self.height - 40, 10) / max(max(ys) - min(ys), 1))
             self.cx = (min(xs) + max(xs)) / 2 + self.pan[0]
             self.cy = (min(ys) + max(ys)) / 2 + self.pan[1]
         self.s = base * self.zoom

@@ -23,7 +23,7 @@
   .sports { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .sport { text-align: left; border: 2px solid var(--fond-3); background: var(--fond); color: var(--encre); border-radius: var(--r);
     padding: 16px; cursor: pointer; font: inherit; }
-  .sport .emoji { font-size: 2.2rem; line-height: 1; margin-bottom: 10px; }
+  .sport .emoji { display: block; width: 40px; height: 40px; margin-bottom: 10px; }
   .sport strong { display: block; font: 800 1.6rem/1 var(--chiffres); margin-bottom: 6px; }
   .sport span { font-size: .9rem; color: var(--brume); display: block; line-height: 1.35; }
   .sport[aria-pressed="true"] { border-color: var(--encre); box-shadow: inset 0 0 0 1px var(--encre); background: var(--fond-2); }
@@ -82,9 +82,9 @@
     <section class="etape" aria-labelledby="t-sport">
       <h2 id="t-sport">Tu pars comment ?</h2>
       <div class="sports">
-        <button type="button" class="sport" data-sport="velo" aria-pressed="false"><span class="emoji" aria-hidden="true">🚲</span><strong>Je pars à vélo</strong>
+        <button type="button" class="sport" data-sport="velo" aria-pressed="false"><img class="emoji" src="/assets/img/emoji/velo.svg" alt="" width="40" height="40"><strong>Je pars à vélo</strong>
           <span>Routes revêtues et pistes cyclables, pour les distances plus longues.</span></button>
-        <button type="button" class="sport" data-sport="course" aria-pressed="false"><span class="emoji" aria-hidden="true">🏃</span><strong>Je pars courir</strong>
+        <button type="button" class="sport" data-sport="course" aria-pressed="false"><img class="emoji" src="/assets/img/emoji/course.svg" alt="" width="40" height="40"><strong>Je pars courir</strong>
           <span>Chemins piétons, parcs et espaces agréables pour courir.</span></button>
       </div>
     </section>
