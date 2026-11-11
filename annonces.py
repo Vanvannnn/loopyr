@@ -42,13 +42,17 @@ class Annonceur:
                                                          if self.sport != "velo" else ""))
         if self.prog and self.prog.evenement == "inverse":
             self._annoncer("Tu fais la boucle dans l'autre sens : je te guide dans ce sens.")
+        if self.prog and self.prog.evenement == "mauvais_sens":
+            if self.vibrer:
+                self.vibrer()
+            self._annoncer("Tu t'éloignes de l'arrivée. Fais demi-tour.")
         if self.prog and self.prog.hors_trace != self.hors:
             self.hors = self.prog.hors_trace
             if self.hors and self.vibrer:
                 self.vibrer()
             self._annoncer("Attention, tu sors du parcours." if self.hors else "Retour sur le parcours.")
         if self.prog and self.prog.evenement == "arrivee":
-            self._annoncer("Tu es arrivé. Boucle terminée.")
+            self._annoncer("Tu es arrivé. Boucle terminée." if self.prog.boucle else "Tu es arrivé.")
 
     def _consigne(self):
         """Chaque consigne est dite une fois, un peu avant le carrefour."""

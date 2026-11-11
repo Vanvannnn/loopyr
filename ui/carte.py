@@ -14,7 +14,7 @@ from kivy.properties import BooleanProperty, ListProperty, NumericProperty
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.stencilview import StencilView
 
-from geo import ecart
+from geo import ecart, haversine
 from ui import widgets
 from ui.widgets import BRUME, ENCRE, FOND, SIGNAL, SUR_SIGNAL, TRACE, TRACE_PALE, Bouton, lab
 
@@ -286,6 +286,8 @@ class Trace(StencilView):
             ligne(self.rejoindre, SIGNAL, 4.5)
         if len(self.prochain) == 2 and self.suivi:  # le prochain carrefour : un anneau encre
             disque(self.prochain, ((13, FOND), (10, ENCRE), (5, FOND)))
+        if len(self.coords) >= 2 and haversine(self.coords[0], self.coords[-1]) > 300:  # trajet : l'arrivée, anneau encre
+            disque(self.coords[-1], ((14, FOND), (11, ENCRE), (6, FOND), (4, ENCRE)))
         if len(self.coords) >= 2:  # départ et arrivée : le point du logo
             disque(self.coords[0], ((14, FOND), (11, SUR_SIGNAL), (8, SIGNAL)))
         if len(self.depart) == 2 and not self.suivi:

@@ -83,8 +83,8 @@ class BRouter:
                 self.ids[nom] = rep["profileid"]
             return self.ids[nom]
 
-    def itineraire(self, points, sport):
-        """points : [(lat, lon), …] dans l'ordre. Renvoie coords, ele, distance (m), montee (m),
+    def itineraire(self, points, sport, alternative=0):
+        """points : [(lat, lon), …] dans l'ordre ; alternative : 0 = la route du moteur, 1 à 3 = ses variantes. Renvoie coords, ele, distance (m), montee (m),
         troncons [(longueur m, étiquettes OSM)] et hints : les consignes [indice du point, commande, sortie de
         rond-point, distance jusqu'à la suivante, angle] (commandes de BRouter, VoiceHint)."""
         lonlats = "|".join(f"{lon:.6f},{lat:.6f}" for lat, lon in points)
@@ -92,7 +92,7 @@ class BRouter:
         for essai in range(2):
             pid = self._profil(SPORTS[sport]["profil"], perime)
             # timode=2 : consignes de navigation (voicehints) calculées par le moteur sur le vrai réseau
-            q = urllib.parse.urlencode({"lonlats": lonlats, "profile": pid, "alternativeidx": 0, "format": "geojson",
+            q = urllib.parse.urlencode({"lonlats": lonlats, "profile": pid, "alternativeidx": alternative, "format": "geojson",
                                         "timode": 2})
             code, texte = self._http(f"{self.url}?{q}")
             if code == 200 and texte.lstrip().startswith("{"):
@@ -318,6 +318,38 @@ def generer(depart, distance, sport, routeur=None, n=3, relief=None, graine=None
                           f"{distance / 1000:.1f} km demandés : c'est ce que le réseau autour de ton départ permet "
                           "de mieux en boucle. Régénère pour d'autres essais.")
     return out
+
+
+def trajets(depart, arrivee, sport, routeur=None, n=3):
+    """De depart à arrivee (lat, lon) : la route du moteur et ses variantes (alternativeidx de BRouter), sans
+    doublon. Même forme de résultat que generer, plus "arrivee" ; pas de "cible" : aucune distance n'est visée."""
+    if sport not in SPORTS:
+        raise ValueError("sport inconnu")
+    s = SPORTS[sport]
+    vol = haversine(depart, arrivee)
+    if vol < 200:
+        raise ValueError("Départ et arrivée trop proches : pour revenir au départ, crée une boucle")
+    if vol > s["maxi"] * 1000:
+        raise ValueError(f"Arrivée trop loin : {s['maxi']} km au plus pour le {s['nom']}")
+    routeur = routeur or BRouter()
+
+    def une(k):
+        try:
+            return routeur.itineraire([depart, arrivee], sport, alternative=k)
+        except ErreurItineraire as e:
+            return str(e)
+    with ThreadPoolExecutor(2) as ex:
+        bruts = list(ex.map(une, range(n)))
+    retenues = []
+    for b in bruts:  # une variante qui reprend presque toute une autre n'apporte rien
+        if isinstance(b, dict) and all(recouvrement_entre(b["coords"], r["coords"]) < 0.8 for r in retenues):
+            res = resume_voies(b["troncons"])
+            b.update(resume_voies=res, qualite=qualite(res, sport), recouvrement=0.0, ecart=0.0)
+            retenues.append(b)
+    erreurs = [b for b in bruts if isinstance(b, str)]
+    message = "" if retenues else (erreurs[0] if erreurs else "Aucun itinéraire trouvé") + " : choisis d'autres points"
+    return {"propositions": retenues, "zone": None, "sport": sport, "depart": list(depart), "arrivee": list(arrivee),
+            "message": message}
 
 
 def recouvrement_entre(a, b):

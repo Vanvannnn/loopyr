@@ -91,7 +91,8 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
         Tuiles.dossier = os.path.join(self.user_data_dir, "tuiles")
         self.chemin_journal = os.path.join(self.user_data_dir, "course_en_cours.db")
         self.journal = Journal(self.chemin_journal)
-        self.creation = {"sport": None, "distance": None, "relief": None, "mode": "gps", "point": None}
+        self.creation = {"sport": None, "distance": None, "relief": None, "mode": "gps", "point": None,
+                         "forme": "boucle", "arrivee": None}
         self.racine = BoxLayout(orientation="vertical")
         self.sm = ScreenManager(transition=Glisse(duration=0.34))
         theme = self.reglages.get("theme")

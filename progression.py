@@ -13,7 +13,7 @@ Les consignes (tourner, rond-point…) sont celles du moteur d'itinéraires (BRo
 sur le vrai réseau routier : rien n'est déduit de la seule forme du tracé."""
 import math
 
-from geo import Plan, cap_entre, projeter
+from geo import Plan, cap_entre, haversine, projeter
 
 FENETRE = 300  # m de boucle cherchés en avant de la dernière position (plus si le GPS s'est tu un moment)
 RECUL = 50  # m cherchés en arrière (GPS qui flotte)
@@ -74,13 +74,16 @@ class Progression:
         self.pts = [tuple(p) for p in coords]
         self.consignes_brutes = [list(h) for h in (consignes or ())]
         self.plan = Plan(*self.pts[0])
+        # trajet de A à B (arrivée loin du départ) : jamais inversé, le remonter mène au départ, pas à l'arrivée
+        self.boucle = haversine(self.pts[0], self.pts[-1]) < 300
         self._preparer()
         self.fait = 0.0  # m de boucle parcourus
         self.ecart = 0.0  # m entre toi et la boucle
         self.hors_trace = False
         self.arrive = False
         self.inversee = False  # la boucle est suivie dans l'autre sens que prévu
-        self.evenement = None  # dernier changement : "hors", "retour", "inverse", "raccourci", "arrivee"
+        self.mauvais_sens = False  # trajet de A à B parcouru vers A
+        self.evenement = None  # dernier changement : "hors", "retour", "inverse", "raccourci", "arrivee", "mauvais_sens"
         self._i, self._f = 0, 0.0
         self._hors = []  # instants des positions hors du tracé, d'affilée
         self._dedans = 0  # positions de suite sur le tracé (pour confirmer un retour)
@@ -153,7 +156,7 @@ class Progression:
         return self
 
     def _sur_le_trace(self, i, f, s, d):
-        self.ecart, self._ailleurs = d, []
+        self.ecart, self._ailleurs, self.mauvais_sens = d, [], False
         if s >= self.fait:
             self.fait, self._i, self._f = s, i, f
         self._hors = []
@@ -185,9 +188,12 @@ class Progression:
         # le sens est net si l'écart total le dit et que presque tous les pas vont dans ce sens (GPS qui flotte)
         montee = s[-1] - s[0] >= GLISSEMENT and sum(b >= a - 2 for a, b in pas) >= 0.75 * len(pas)
         descente = s[0] - s[-1] >= GLISSEMENT and sum(b <= a + 2 for a, b in pas) >= 0.75 * len(pas)
-        if descente:  # tu remontes la boucle : elle est faite dans l'autre sens
+        if descente and self.boucle:  # tu remontes la boucle : elle est faite dans l'autre sens
             self.inverser(s[-1])
             self.evenement = "inverse"
+        elif descente:  # trajet remonté vers le départ : on le dit une fois, sans rien changer
+            if not self.mauvais_sens:
+                self.mauvais_sens, self.evenement = True, "mauvais_sens"
         elif montee and s[-1] > self.fait:  # raccourci ou départ plus loin : on suit à partir de là
             self.fait = s[-1]
             self._i = self._segment_de(s[-1])

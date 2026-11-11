@@ -42,15 +42,15 @@ def gpx(act, nom=None):
     return "\n".join(lignes)
 
 
-def nom_itineraire(distance, sport):
-    """boucle_10km_velo.gpx"""
-    return f"boucle_{round(distance / 1000)}km_{sport}.gpx"
+def nom_itineraire(distance, sport, trajet=False):
+    """boucle_10km_velo.gpx (trajet_10km_velo.gpx pour un trajet de A à B)"""
+    return f"{'trajet' if trajet else 'boucle'}_{round(distance / 1000)}km_{sport}.gpx"
 
 
 def gpx_itineraire(coords, sport, distance, montee=None, ele=None, nom=None):
     """Le tracé prévu : coordonnées et altitude seulement. Aucune durée ni vitesse : rien n'a été couru."""
     km = f"{distance / 1000:.1f}".replace(".", ",")
-    nom = escape(nom or f"Boucle Loopy {km} km ({'vélo' if sport == 'velo' else 'course à pied'})")
+    nom = escape(nom or f"Parcours Loopy {km} km ({'vélo' if sport == 'velo' else 'course à pied'})")
     desc = f"Itinéraire prévu par Loopy : {km} km" + (f", {montee:.0f} m de D+" if montee is not None else "")
     ele = ele or [None] * len(coords)
     lignes = ENTETE + [f"  <metadata><name>{nom}</name><desc>{escape(desc)}</desc></metadata>",

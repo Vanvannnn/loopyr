@@ -386,12 +386,15 @@ class EcranCourse(Screen):
             self.message = ("Tu fais la boucle dans l'autre sens : on la suit dans ce sens", time.time() + 8, "demi_tour")
             if self.velo:  # à vélo, les sens interdits comptent : le moteur recalcule la boucle dans ce sens
                 self._recalculer_sens(pos)
+        elif evt == "mauvais_sens":
+            self.message = ("Tu t'éloignes de l'arrivée : fais demi-tour", time.time() + 10, "demi_tour")
         elif evt == "hors":
             self._rejoindre(pos)
         elif evt in ("retour", "raccourci"):
             self.prog_rejoindre, self.trace.rejoindre = None, []
         elif evt == "arrivee":
-            self.message = ("Tu es arrivé : boucle terminée", time.time() + 30, "tout_droit")
+            self.message = ("Tu es arrivé : boucle terminée" if self.prog.boucle else "Tu es arrivé", time.time() + 30,
+                            "tout_droit")
 
     @staticmethod
     def _hints_de(prog):
@@ -484,7 +487,7 @@ class EcranCourse(Screen):
         if p.hors_trace:
             b.gauche.text, b.droite.text = "Hors du parcours", f"à {p.ecart:.0f} m"
         elif p.arrive:
-            b.gauche.text, b.droite.text = "Boucle terminée", "100 %"
+            b.gauche.text, b.droite.text = "Boucle terminée" if p.boucle else "Arrivé", "100 %"
         else:
             b.gauche.text, b.droite.text = f"{nombre(p.restant / 1000)} km restants", f"{p.pourcent:.0f} %"
 

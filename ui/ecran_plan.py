@@ -12,6 +12,7 @@ from kivy.uix.screenmanager import Screen
 from kivy.utils import platform
 
 import boucles
+from geo import haversine
 from gpx import gpx_itineraire, nom_itineraire
 from ui import widgets
 from ui.carte import Trace, avec_zoom
@@ -112,7 +113,8 @@ class EcranPlan(Screen):
     def actifs(self, oui):
         for b in (self.btn_gpx, self.btn_garder, self.btn_partir):
             b.disabled = not oui
-        self.btn_autre.disabled = self.calcul or self.itineraire is not None
+        self.btn_autre.disabled = (self.calcul or self.itineraire is not None
+                                   or self.app.creation.get("forme") == "trajet")  # variantes déjà toutes montrées
 
     # --- génération ---
     def lancer(self, *_):
@@ -120,8 +122,9 @@ class EcranPlan(Screen):
         if self.calcul:
             return
         c, self.itineraire, self.retour_vers = self.app.creation, None, "distance"
-        sport, dist = c["sport"], c["distance"]
-        self.barre.titre.text = f"{'Vélo' if sport == 'velo' else 'Course'}, {nombre(dist / 1000)} km"
+        sport = c["sport"]
+        self.barre.titre.text = (f"Trajet {'à vélo' if sport == 'velo' else 'en courant'}" if c.get("forme") == "trajet"
+                                 else f"{'Vélo' if sport == 'velo' else 'Course'}, {nombre(c['distance'] / 1000)} km")
         self.res = None
         self.trace.coords, self.trace.autres, self.trace.zone = [], [], []
         self.props.clear_widgets()
@@ -142,16 +145,39 @@ class EcranPlan(Screen):
         if depart is None:
             self.info.text = "Position GPS pas encore connue : choisis un point ou cherche un lieu"
             return
-        self.chercher(tuple(depart))
+        self._suite(tuple(depart))
 
     def point_choisi(self, lat, lon):
         self.app.creation["point"] = (lat, lon)
         self.trace.choix = None
-        self.chercher((lat, lon))
+        self._suite((lat, lon))
+
+    def _suite(self, depart):
+        """Départ connu : pour un trajet sans arrivée, on la fait toucher sur la carte ; sinon on cherche."""
+        self.depart = depart
+        if self.app.creation.get("forme") == "trajet" and not self.app.creation.get("arrivee"):
+            self.trace.depart, self.trace.centre = list(depart), list(depart)
+            self.trace.choix = self.arrivee_choisie
+            self.info.text = "Touche la carte pour placer ton arrivée"
+            return
+        self.chercher(depart)
+
+    def arrivee_choisie(self, lat, lon):
+        self.app.creation["arrivee"] = (lat, lon)
+        self.trace.choix = None
+        self.chercher(self.depart)
 
     def chercher(self, depart):
         c = self.app.creation
         self.depart = depart
+        if c.get("forme") == "trajet":
+            self.trace.depart, self.trace.centre, self.trace.zone = list(depart), list(depart), []
+            self.calcul = True
+            self.actifs(False)
+            self.info.text = "Recherche d'itinéraires jusqu'à l'arrivée…"
+            threading.Thread(target=self._calcul_trajet, args=(depart, tuple(c["arrivee"]), c["sport"]),
+                             daemon=True).start()
+            return
         self.trace.depart = list(depart)
         self.trace.centre = list(depart)
         rayon = c["distance"] / (2 * 3.1416 * boucles.SPORTS[c["sport"]]["detour"])
@@ -170,6 +196,13 @@ class EcranPlan(Screen):
             res = {"propositions": [], "message": str(err) or "La génération a échoué", "zone": None}
         Clock.schedule_once(lambda dt: self.afficher(res))
 
+    def _calcul_trajet(self, depart, arrivee, sport):
+        try:
+            res = boucles.trajets(depart, arrivee, sport, self.app.moteur)
+        except Exception as err:  # ne jamais laisser l'écran bloqué
+            res = {"propositions": [], "message": str(err) or "La recherche a échoué", "zone": None}
+        Clock.schedule_once(lambda dt: self.afficher(res))
+
     def afficher(self, res):
         self.calcul = False
         self.res, self.choix_i = res, 0
@@ -177,7 +210,7 @@ class EcranPlan(Screen):
             z = res["zone"]
             self.trace.zone = [*z["centre"], z["rayon"]]
         if not res["propositions"]:
-            self.info.text = res["message"] or "Aucune boucle trouvée"
+            self.info.text = res["message"] or "Aucun parcours trouvé"
             self.actifs(False)
             apparaitre(self.info)
             return
@@ -221,8 +254,9 @@ class EcranPlan(Screen):
             return None
         p = self.res["propositions"][self.choix_i]
         sport = self.res.get("sport") or self.app.creation["sport"]
+        quoi = "Trajet" if self.res.get("arrivee") else "Boucle"
         return {**boucles.alleger(p), "sport": sport,
-                "nom": p.get("nom") or f"Boucle {nombre(p['distance'] / 1000)} km ({'vélo' if sport == 'velo' else 'course'})"}
+                "nom": p.get("nom") or f"{quoi} {nombre(p['distance'] / 1000)} km ({'vélo' if sport == 'velo' else 'course'})"}
 
     # --- une boucle déjà enregistrée ---
     def montrer_itineraire(self, it):
@@ -242,13 +276,13 @@ class EcranPlan(Screen):
         """GPX de l'itinéraire (le tracé prévu, sans heure ni performance) : télécharger ou partager."""
         from ui.widgets import choix
         if self.proposition():
-            choix("GPX de la boucle", "Le tracé prévu, pour un compteur GPS, Strava (itinéraire) ou une autre app.",
+            choix("GPX du parcours", "Le tracé prévu, pour un compteur GPS, Strava (itinéraire) ou une autre app.",
                   [("Télécharger", lambda: self._gpx(False), "signal"), ("Partager", lambda: self._gpx(True), "contour")],
                   hauteur=dp(260))
 
     def _gpx(self, partager):
         p = self.proposition()
-        nom = nom_itineraire(p["distance"], p["sport"])
+        nom = nom_itineraire(p["distance"], p["sport"], haversine(p["coords"][0], p["coords"][-1]) > 300)
         texte = gpx_itineraire(p["coords"], p["sport"], p["distance"], p["montee"], p.get("ele"), p["nom"])
         try:
             self.l_details.text = (self.app.partager_gpx if partager else self.app.exporter_gpx)(nom, texte)
