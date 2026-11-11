@@ -7,6 +7,7 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 
 # le serveur (API + site) : http://localhost:8000
+# sans DATABASE_URL, un PostgreSQL local est lancé tout seul (pgserver) dans serveur/donnees/postgres
 .venv/bin/uvicorn serveur.app:app --reload
 
 # l'app (autre terminal) : elle parle au serveur de http://localhost:8000 par défaut
@@ -27,7 +28,9 @@ Aucun secret n'est écrit dans le code. Mets ces valeurs dans l'environnement du
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `LOOPY_URL_PUBLIQUE` | Adresse publique du serveur, par exemple `https://loopy.example.org`. Sert aux liens envoyés par e-mail et au retour OAuth de Strava. En `https://`, les cookies sont marqués `Secure`. | `http://localhost:8000` |
-| `LOOPY_DONNEES` | Dossier de la base SQLite (`loopy.db`) et des photos de profil. **À sauvegarder.** | `serveur/donnees` |
+| `DATABASE_URL` | Adresse de la base **PostgreSQL**, par exemple `postgresql://utilisateur:motdepasse@hote/loopy?sslmode=require` (Neon, Supabase, Render…). Le schéma est créé au démarrage. Vide : base locale de développement (pgserver), **jamais en production**. | vide |
+| `LOOPY_CONNEXIONS` | Connexions ouvertes au plus vers la base (réserve partagée). Reste sous la limite de ton offre PostgreSQL. | `10` |
+| `LOOPY_DONNEES` | Développement seulement : dossier de la base locale. Le serveur n'écrit aucun fichier en production. | `serveur/donnees` |
 | `LOOPY_BROUTER` | Moteur d'itinéraires BRouter, utilisé par le site (voir §5) | `https://brouter.de/brouter` |
 | `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET` | Application Strava (voir §3). Sans elles, tout fonctionne sauf l'envoi vers Strava, qui l'explique à l'utilisateur. | vide |
 | `SMTP_HOTE`, `SMTP_PORT`, `SMTP_UTILISATEUR`, `SMTP_MOT_DE_PASSE`, `SMTP_EXPEDITEUR` | Envoi des e-mails de nouveau mot de passe (STARTTLS, port 587 par défaut). Sans eux, le lien est écrit dans le journal du serveur : pratique en développement, **pas en production**. | vide |
@@ -53,7 +56,8 @@ Fonctionnement :
 
 - Mets-le derrière un proxy HTTPS : Caddy, nginx ou Traefik. **La géolocalisation du site n'est disponible qu'en HTTPS**, sauf sur `localhost`.
 - Lance `uvicorn serveur.app:app --host 127.0.0.1 --port 8000 --workers 1`. Un seul processus, car le limiteur de débit est en mémoire. Au-delà, remplace-le par un limiteur partagé (Redis par exemple).
-- Sauvegarde régulièrement `LOOPY_DONNEES`. Copie à chaud possible avec `sqlite3 loopy.db ".backup sauvegarde.db"`.
+- Base : renseigne `DATABASE_URL`. Le serveur ne garde rien sur son disque : il peut être redéployé ou déplacé sans perte. Les sauvegardes sont celles de l'hébergeur PostgreSQL ; pour une copie à toi : `pg_dump "$DATABASE_URL" > sauvegarde.sql`.
+- Neon ou Supabase : l'adresse directe comme l'adresse « pooled » fonctionnent (le serveur n'utilise pas de requêtes préparées). Garde `--workers 1`.
 - L'app Android se règle dans **Profil > L'app > Adresse du serveur Loopy**, avec l'adresse `https://…` du serveur.
 
 ## 5. Moteur d'itinéraires : sa propre instance BRouter

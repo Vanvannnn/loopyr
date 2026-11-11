@@ -7,7 +7,7 @@ Le projet contient trois parties :
 | Dossier | Partie |
 |---|---|
 | racine, `ui/`, `capteurs/`, `service/` | L'**app Android** (Python, Kivy, buildozer) |
-| `serveur/` | Le **serveur** (FastAPI, SQLite) : comptes, profils, activités, communauté, Strava, génération pour le site |
+| `serveur/` | Le **serveur** (FastAPI, PostgreSQL) : comptes, profils, activités, communauté, Strava, génération pour le site |
 | `website/` | Le **site** : présentation, création de boucle, compte et espace personnel. Servi par le serveur |
 
 Le code métier en Python pur est **partagé** par l'app et le serveur. Il est à la racine :

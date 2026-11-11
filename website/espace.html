@@ -224,7 +224,6 @@ async function profil() {
   const pref = u.preferences || {};
   vue.innerHTML = `<form class="profil-form" id="f">
     <fieldset><legend>Toi</legend>
-      <div class="champ"><label for="avatar">Photo de profil</label><input id="avatar" type="file" accept="image/png,image/jpeg,image/webp"><p class="aide">PNG, JPEG ou WebP, 2 Mo au plus.</p></div>
       <div class="champ"><label for="bio">Présentation</label><textarea id="bio" maxlength="500">${echapper(u.bio)}</textarea></div>
       <div class="champ"><label for="sport">Sport favori</label><select id="sport">${Object.entries(SPORTS).map(([k, s]) => `<option value="${k}" ${k === u.sport ? "selected" : ""}>${s.nom}</option>`).join("")}</select></div>
     </fieldset>
@@ -261,8 +260,6 @@ async function profil() {
   $("#f").addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
-      const f = $("#avatar").files[0];
-      if (f) { const fd = new FormData(); fd.append("fichier", f); await api("/api/moi/avatar", { methode: "POST", fichier: fd }); }
       const p = { ...pref, relief: $("#relief").value || null, distance_course: parseFloat($("#dcourse").value) || null, distance_velo: parseFloat($("#dvelo").value) || null };
       u = { ...u, ...(await api("/api/moi", { methode: "PATCH", corps: { bio: $("#bio").value, sport: $("#sport").value, preferences: p,
         visibilite_profil: $("#vp").value, visibilite_activites: $("#va").value, masquer_depart: $("#md").checked } })) };

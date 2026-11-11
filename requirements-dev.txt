@@ -2,4 +2,5 @@ kivy[base]==2.3.1
 plyer
 certifi
 pytest
+pgserver  # PostgreSQL local, pour le développement et les tests
 -r requirements-serveur.txt

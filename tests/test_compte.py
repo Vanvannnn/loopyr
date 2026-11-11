@@ -10,10 +10,10 @@ from stockage import RESUME_ITINERAIRE, Stockage
 
 
 @pytest.fixture(scope="module")
-def url(tmp_path_factory):
-    from serveur import config
-    d = tmp_path_factory.mktemp("serveur")
-    config.DONNEES, config.DB = str(d), str(d / "loopy.db")
+def url(postgres):
+    from serveur import db
+    with db.reserve().connection() as con:
+        con.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
     from serveur.app import app
     s = socket.socket()
     s.bind(("127.0.0.1", 0))

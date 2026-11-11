@@ -5,8 +5,8 @@ import contextlib, json, os, re, secrets, smtplib, sys, time, uuid
 from email.message import EmailMessage
 from typing import Literal, Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -19,8 +19,8 @@ from serveur import config, db, securite, strava  # noqa: E402
 @contextlib.asynccontextmanager
 async def cycle(_app):
     db.initialiser()
-    os.makedirs(os.path.join(config.DONNEES, "avatars"), exist_ok=True)
     yield
+    db.fermer()
 
 
 app = FastAPI(title="Loopy", docs_url="/api/docs", openapi_url="/api/openapi.json", lifespan=cycle)
@@ -36,12 +36,8 @@ Ressenti = Literal["facile", "bien", "dur", "epuisant"]
 
 
 def base():
-    con = db.ouvrir()
-    try:
+    with db.reserve().connection() as con:
         yield con
-        con.commit()
-    finally:
-        con.close()
 
 
 def ip(req: Request):
@@ -68,7 +64,7 @@ def utilisateur_optionnel(req: Request, con=Depends(base)):
             req.headers.get("x-loopy") != "1":
         raise HTTPException(403, "Requête refusée")
     return con.execute("SELECT u.* FROM sessions s JOIN utilisateurs u ON u.id=s.utilisateur "
-                       "WHERE s.jeton=? AND s.expire>?", (securite.empreinte(j), time.time())).fetchone()
+                       "WHERE s.jeton=%s AND s.expire>%s", (securite.empreinte(j), time.time())).fetchone()
 
 
 def utilisateur(u=Depends(utilisateur_optionnel)):
@@ -107,7 +103,7 @@ class Connexion(BaseModel):
 
 def ouvrir_session(con, uid, rep: Response):
     j, h = securite.nouveau_jeton()
-    con.execute("INSERT INTO sessions VALUES (?,?,?)", (h, uid, time.time() + SESSION))
+    con.execute("INSERT INTO sessions VALUES (%s,%s,%s)", (h, uid, time.time() + SESSION))
     rep.set_cookie(COOKIE, j, max_age=SESSION, httponly=True, samesite="lax", secure=config.COOKIE_SECURE)
     return j
 
@@ -115,18 +111,18 @@ def ouvrir_session(con, uid, rep: Response):
 @app.post("/api/comptes", status_code=201)
 def inscrire(d: Inscription, req: Request, rep: Response, con=Depends(base)):
     limiter(req, "inscription", 5)
-    if con.execute("SELECT 1 FROM utilisateurs WHERE email=? OR nom=?", (d.email, d.nom)).fetchone():
+    if con.execute("SELECT 1 FROM utilisateurs WHERE email=%s OR nom=%s", (d.email, d.nom)).fetchone():
         raise HTTPException(409, "Cette adresse ou ce nom d'utilisateur est déjà pris")
-    cur = con.execute("INSERT INTO utilisateurs(email, nom, mdp, cree) VALUES (?,?,?,?)",
+    cur = con.execute("INSERT INTO utilisateurs(email, nom, mdp, cree) VALUES (%s,%s,%s,%s) RETURNING id",
                       (d.email, d.nom, securite.hacher_mdp(d.mot_de_passe), time.time()))
-    u = con.execute("SELECT * FROM utilisateurs WHERE id=?", (cur.lastrowid,)).fetchone()
+    u = con.execute("SELECT * FROM utilisateurs WHERE id=%s", (cur.fetchone()["id"],)).fetchone()
     return {"jeton": ouvrir_session(con, u["id"], rep), "utilisateur": moi_public(u)}
 
 
 @app.post("/api/sessions")
 def connecter(d: Connexion, req: Request, rep: Response, con=Depends(base)):
     limiter(req, "connexion", 10)
-    u = con.execute("SELECT * FROM utilisateurs WHERE email=?", (d.email.strip().lower(),)).fetchone()
+    u = con.execute("SELECT * FROM utilisateurs WHERE email=%s", (d.email.strip().lower(),)).fetchone()
     if not u or not securite.verifier_mdp(d.mot_de_passe, u["mdp"]):
         raise HTTPException(401, "E-mail ou mot de passe incorrect")
     return {"jeton": ouvrir_session(con, u["id"], rep), "utilisateur": moi_public(u)}
@@ -136,7 +132,7 @@ def connecter(d: Connexion, req: Request, rep: Response, con=Depends(base)):
 def deconnecter(req: Request, rep: Response, con=Depends(base)):
     j = jeton_de(req)
     if j:
-        con.execute("DELETE FROM sessions WHERE jeton=?", (securite.empreinte(j),))
+        con.execute("DELETE FROM sessions WHERE jeton=%s", (securite.empreinte(j),))
     rep.delete_cookie(COOKIE)
 
 
@@ -166,10 +162,10 @@ def envoyer_mail(dest, sujet, texte):
 @app.post("/api/mot-de-passe/oubli", status_code=202)
 def oubli(d: Oubli, req: Request, con=Depends(base)):
     limiter(req, "oubli", 3)
-    u = con.execute("SELECT * FROM utilisateurs WHERE email=?", (d.email.strip().lower(),)).fetchone()
+    u = con.execute("SELECT * FROM utilisateurs WHERE email=%s", (d.email.strip().lower(),)).fetchone()
     if u:  # même réponse que l'adresse existe ou non : on ne révèle pas qui a un compte
         j, h = securite.nouveau_jeton()
-        con.execute("INSERT INTO reinits VALUES (?,?,?)", (h, u["id"], time.time() + 3600))
+        con.execute("INSERT INTO reinits VALUES (%s,%s,%s)", (h, u["id"], time.time() + 3600))
         envoyer_mail(u["email"], "Loopy : nouveau mot de passe",
                      f"Pour choisir un nouveau mot de passe (lien valable 1 heure) :\n"
                      f"{config.URL_PUBLIQUE}/reinitialiser.html#{j}\n\nSi tu n'as rien demandé, ignore ce message.")
@@ -180,23 +176,19 @@ def oubli(d: Oubli, req: Request, con=Depends(base)):
 def reinit(d: Reinit, req: Request, con=Depends(base)):
     limiter(req, "reinit", 10)
     h = securite.empreinte(d.jeton)
-    r = con.execute("SELECT * FROM reinits WHERE jeton=? AND expire>?", (h, time.time())).fetchone()
+    r = con.execute("SELECT * FROM reinits WHERE jeton=%s AND expire>%s", (h, time.time())).fetchone()
     if not r:
         raise HTTPException(400, "Lien expiré ou déjà utilisé")
-    con.execute("UPDATE utilisateurs SET mdp=? WHERE id=?", (securite.hacher_mdp(d.mot_de_passe), r["utilisateur"]))
-    con.execute("DELETE FROM reinits WHERE utilisateur=?", (r["utilisateur"],))
-    con.execute("DELETE FROM sessions WHERE utilisateur=?", (r["utilisateur"],))  # déconnecte partout
+    con.execute("UPDATE utilisateurs SET mdp=%s WHERE id=%s", (securite.hacher_mdp(d.mot_de_passe), r["utilisateur"]))
+    con.execute("DELETE FROM reinits WHERE utilisateur=%s", (r["utilisateur"],))
+    con.execute("DELETE FROM sessions WHERE utilisateur=%s", (r["utilisateur"],))  # déconnecte partout
     return {"message": "Mot de passe changé : connecte-toi"}
 
 
 # --- profil ---
-def avatar_url(u):
-    return f"/api/avatars/{u['avatar']}" if u["avatar"] else None
-
-
 def moi_public(u):
     return {"nom": u["nom"], "email": u["email"], "bio": u["bio"], "sport": u["sport"],
-            "preferences": json.loads(u["preferences"] or "{}"), "avatar": avatar_url(u),
+            "preferences": json.loads(u["preferences"] or "{}"),
             "visibilite_profil": u["visibilite_profil"], "visibilite_activites": u["visibilite_activites"],
             "masquer_depart": bool(u["masquer_depart"])}
 
@@ -225,67 +217,32 @@ def modifier_moi(d: Profil, u=Depends(utilisateur), con=Depends(base)):
     if "masquer_depart" in champs:
         champs["masquer_depart"] = int(champs["masquer_depart"])
     for k, v in champs.items():  # noms de colonnes : uniquement ceux du modèle Profil
-        con.execute(f"UPDATE utilisateurs SET {k}=? WHERE id=?", (v, u["id"]))
-    return moi_public(con.execute("SELECT * FROM utilisateurs WHERE id=?", (u["id"],)).fetchone())
-
-
-SIGNATURES = {b"\x89PNG": "png", b"\xff\xd8\xff": "jpg", b"RIFF": "webp"}
-
-
-@app.post("/api/moi/avatar")
-async def changer_avatar(fichier: UploadFile = File(...), u=Depends(utilisateur), con=Depends(base)):
-    data = await fichier.read(2_000_001)
-    if len(data) > 2_000_000:
-        raise HTTPException(413, "Image trop lourde (2 Mo au plus)")
-    ext = next((e for sig, e in SIGNATURES.items() if data.startswith(sig)), None)
-    if ext is None or (ext == "webp" and data[8:12] != b"WEBP"):
-        raise HTTPException(415, "Format accepté : PNG, JPEG ou WebP")
-    nom = f"{uuid.uuid4().hex}.{ext}"
-    with open(os.path.join(config.DONNEES, "avatars", nom), "wb") as f:
-        f.write(data)
-    if u["avatar"]:
-        try:
-            os.remove(os.path.join(config.DONNEES, "avatars", u["avatar"]))
-        except OSError:
-            pass
-    con.execute("UPDATE utilisateurs SET avatar=? WHERE id=?", (nom, u["id"]))
-    return {"avatar": f"/api/avatars/{nom}"}
-
-
-@app.get("/api/avatars/{nom}")
-def avatar(nom: str):
-    if not re.match(r"^[0-9a-f]{32}\.(png|jpg|webp)$", nom):
-        raise HTTPException(404)
-    chemin = os.path.join(config.DONNEES, "avatars", nom)
-    if not os.path.exists(chemin):
-        raise HTTPException(404)
-    return FileResponse(chemin, headers={"Cache-Control": "public, max-age=86400"})
+        con.execute(f"UPDATE utilisateurs SET {k}=%s WHERE id=%s", (v, u["id"]))
+    return moi_public(con.execute("SELECT * FROM utilisateurs WHERE id=%s", (u["id"],)).fetchone())
 
 
 @app.delete("/api/moi", status_code=204)
 def supprimer_compte(rep: Response, u=Depends(utilisateur), con=Depends(base)):
     """Suppression du compte et de toutes ses données (droit à l'effacement)."""
     uid = u["id"]
-    ligne = con.execute("SELECT acces FROM strava WHERE utilisateur=?", (uid,)).fetchone()
+    ligne = con.execute("SELECT acces FROM strava WHERE utilisateur=%s", (uid,)).fetchone()
     if ligne:
         strava.revoquer(ligne["acces"])
-    con.execute("BEGIN")  # tout ou rien
-    ids = [r["id"] for r in con.execute("SELECT id FROM activites WHERE utilisateur=?", (uid,))]
+    with con.transaction():  # tout ou rien
+        _effacer_compte(con, uid)
+    rep.delete_cookie(COOKIE)
+
+
+def _effacer_compte(con, uid):
+    ids = [r["id"] for r in con.execute("SELECT id FROM activites WHERE utilisateur=%s", (uid,))]
     for a in ids:
-        con.execute("DELETE FROM jaimes WHERE activite=?", (a,))
-        con.execute("DELETE FROM commentaires WHERE activite=?", (a,))
+        con.execute("DELETE FROM jaimes WHERE activite=%s", (a,))
+        con.execute("DELETE FROM commentaires WHERE activite=%s", (a,))
     for t, c in (("activites", "utilisateur"), ("itineraires", "utilisateur"), ("sessions", "utilisateur"),
                  ("reinits", "utilisateur"), ("strava", "utilisateur"), ("etats_oauth", "utilisateur"),
                  ("jaimes", "utilisateur"), ("commentaires", "utilisateur"), ("abonnements", "suiveur"),
                  ("abonnements", "suivi"), ("utilisateurs", "id")):
-        con.execute(f"DELETE FROM {t} WHERE {c}=?", (uid,))
-    con.execute("COMMIT")
-    if u["avatar"]:
-        try:
-            os.remove(os.path.join(config.DONNEES, "avatars", u["avatar"]))
-        except OSError:
-            pass
-    rep.delete_cookie(COOKIE)
+        con.execute(f"DELETE FROM {t} WHERE {c}=%s", (uid,))
 
 
 def stats(con, uid, visibles=None):
@@ -293,18 +250,18 @@ def stats(con, uid, visibles=None):
     filtre = f" AND {visibles}" if visibles else ""
     par_sport = {r["sport"]: {"nombre": r["n"], "distance": r["d"] or 0, "duree": r["t"] or 0, "denivele": r["z"] or 0}
                  for r in con.execute(f"SELECT sport, COUNT(*) n, SUM(distance) d, SUM(duree) t, SUM(denivele) z "
-                                      f"FROM activites WHERE utilisateur=?{filtre} GROUP BY sport", (uid,))}
+                                      f"FROM activites WHERE utilisateur=%s{filtre} GROUP BY sport", (uid,))}
     debut = time.time() - 84 * 86400
     semaines = [0.0] * 12
-    for r in con.execute(f"SELECT debut, distance FROM activites WHERE utilisateur=? AND debut>?{filtre}", (uid, debut)):
+    for r in con.execute(f"SELECT debut, distance FROM activites WHERE utilisateur=%s AND debut>%s{filtre}", (uid, debut)):
         semaines[min(11, int((r["debut"] - debut) // (7 * 86400)))] += r["distance"] / 1000
     return {"par_sport": par_sport, "km_par_semaine": [round(k, 1) for k in semaines],
-            "itineraires": con.execute("SELECT COUNT(*) FROM itineraires WHERE utilisateur=?", (uid,)).fetchone()[0]}
+            "itineraires": con.execute("SELECT COUNT(*) AS n FROM itineraires WHERE utilisateur=%s", (uid,)).fetchone()["n"]}
 
 
 # --- visibilité ---
 def suit(con, suiveur, suivi):
-    return suiveur is not None and con.execute("SELECT 1 FROM abonnements WHERE suiveur=? AND suivi=?",
+    return suiveur is not None and con.execute("SELECT 1 FROM abonnements WHERE suiveur=%s AND suivi=%s",
                                                (suiveur, suivi)).fetchone() is not None
 
 
@@ -336,49 +293,49 @@ def chercher_utilisateurs(q: str = "", lecteur=Depends(utilisateur_optionnel), c
     q = q.strip().lower()[:30]
     if len(q) < 2:
         return []
-    lignes = con.execute("SELECT * FROM utilisateurs WHERE nom LIKE ? AND visibilite_profil!='prive' LIMIT 20",
+    lignes = con.execute("SELECT * FROM utilisateurs WHERE nom ILIKE %s AND visibilite_profil!='prive' LIMIT 20",
                          (q.replace("%", "").replace("_", r"\_") + "%",))
     return [carte_utilisateur(con, u, lecteur) for u in lignes]
 
 
 def carte_utilisateur(con, u, lecteur):
-    return {"nom": u["nom"], "avatar": avatar_url(u), "sport": u["sport"],
+    return {"nom": u["nom"], "sport": u["sport"],
             "suivi": suit(con, lecteur["id"] if lecteur else None, u["id"])}
 
 
 @app.get("/api/utilisateurs/{nom}")
 def profil_public(nom: str, lecteur=Depends(utilisateur_optionnel), con=Depends(base)):
-    u = con.execute("SELECT * FROM utilisateurs WHERE nom=?", (nom.lower(),)).fetchone()
+    u = con.execute("SELECT * FROM utilisateurs WHERE nom=%s", (nom.lower(),)).fetchone()
     if not u or not peut_voir(con, lecteur, u["id"], u["visibilite_profil"]):
         raise HTTPException(404, "Profil introuvable ou privé")
     visibles = clause_visible(con, lecteur, u["id"])
-    acts = con.execute(f"SELECT * FROM activites WHERE utilisateur=?{' AND ' + visibles if visibles else ''} "
+    acts = con.execute(f"SELECT * FROM activites WHERE utilisateur=%s{' AND ' + visibles if visibles else ''} "
                        "ORDER BY debut DESC LIMIT 30", (u["id"],)).fetchall()
-    n = lambda sql: con.execute(sql, (u["id"],)).fetchone()[0]  # noqa: E731
+    n = lambda sql: con.execute(sql, (u["id"],)).fetchone()["n"]  # noqa: E731
     return {**carte_utilisateur(con, u, lecteur), "bio": u["bio"], "stats": stats(con, u["id"], visibles),
-            "abonnes": n("SELECT COUNT(*) FROM abonnements WHERE suivi=?"),
-            "abonnements": n("SELECT COUNT(*) FROM abonnements WHERE suiveur=?"),
+            "abonnes": n("SELECT COUNT(*) AS n FROM abonnements WHERE suivi=%s"),
+            "abonnements": n("SELECT COUNT(*) AS n FROM abonnements WHERE suiveur=%s"),
             "activites": [resume_activite(con, a, u, lecteur) for a in acts]}
 
 
 @app.post("/api/utilisateurs/{nom}/abonnement", status_code=204)
 def suivre(nom: str, u=Depends(utilisateur), con=Depends(base)):
-    cible = con.execute("SELECT id FROM utilisateurs WHERE nom=?", (nom.lower(),)).fetchone()
+    cible = con.execute("SELECT id FROM utilisateurs WHERE nom=%s", (nom.lower(),)).fetchone()
     if not cible or cible["id"] == u["id"]:
         raise HTTPException(404, "Utilisateur introuvable")
-    con.execute("INSERT OR IGNORE INTO abonnements VALUES (?,?,?)", (u["id"], cible["id"], time.time()))
+    con.execute("INSERT INTO abonnements VALUES (%s,%s,%s) ON CONFLICT DO NOTHING", (u["id"], cible["id"], time.time()))
 
 
 @app.delete("/api/utilisateurs/{nom}/abonnement", status_code=204)
 def ne_plus_suivre(nom: str, u=Depends(utilisateur), con=Depends(base)):
-    con.execute("DELETE FROM abonnements WHERE suiveur=? AND suivi=(SELECT id FROM utilisateurs WHERE nom=?)",
+    con.execute("DELETE FROM abonnements WHERE suiveur=%s AND suivi=(SELECT id FROM utilisateurs WHERE nom=%s)",
                 (u["id"], nom.lower()))
 
 
 @app.get("/api/moi/abonnements")
 def mes_abonnements(u=Depends(utilisateur), con=Depends(base)):
-    suivis = con.execute("SELECT u.* FROM abonnements a JOIN utilisateurs u ON u.id=a.suivi WHERE a.suiveur=?", (u["id"],))
-    abonnes = con.execute("SELECT u.* FROM abonnements a JOIN utilisateurs u ON u.id=a.suiveur WHERE a.suivi=?", (u["id"],))
+    suivis = con.execute("SELECT u.* FROM abonnements a JOIN utilisateurs u ON u.id=a.suivi WHERE a.suiveur=%s", (u["id"],))
+    abonnes = con.execute("SELECT u.* FROM abonnements a JOIN utilisateurs u ON u.id=a.suiveur WHERE a.suivi=%s", (u["id"],))
     return {"abonnements": [carte_utilisateur(con, x, u) for x in suivis],
             "abonnes": [carte_utilisateur(con, x, u) for x in abonnes]}
 
@@ -417,7 +374,7 @@ def itin_json(r, proprietaire, lecteur, complet=True):
 
 @app.get("/api/itineraires")
 def mes_itineraires(favoris: bool = False, u=Depends(utilisateur), con=Depends(base)):
-    sql = "SELECT * FROM itineraires WHERE utilisateur=?" + (" AND favori=1" if favoris else "") + " ORDER BY cree DESC"
+    sql = "SELECT * FROM itineraires WHERE utilisateur=%s" + (" AND favori=1" if favoris else "") + " ORDER BY cree DESC"
     return [itin_json(r, u, u, complet=False) for r in con.execute(sql, (u["id"],))]
 
 
@@ -425,14 +382,14 @@ def mes_itineraires(favoris: bool = False, u=Depends(utilisateur), con=Depends(b
 def creer_itineraire(d: NouvelItineraire, u=Depends(utilisateur), con=Depends(base)):
     i = uuid.uuid4().hex[:16]
     ele = d.ele if d.ele and len(d.ele) == len(d.coords) else None
-    con.execute("INSERT INTO itineraires VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    con.execute("INSERT INTO itineraires VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (i, u["id"], d.nom, d.sport, d.distance, d.montee, json.dumps(d.coords), json.dumps(ele),
                  json.dumps(d.resume_voies) if d.resume_voies else None, int(d.favori), int(d.partage), time.time()))
-    return itin_json(con.execute("SELECT * FROM itineraires WHERE id=?", (i,)).fetchone(), u, u)
+    return itin_json(con.execute("SELECT * FROM itineraires WHERE id=%s", (i,)).fetchone(), u, u)
 
 
 def itin_de(con, i, u):
-    r = con.execute("SELECT * FROM itineraires WHERE id=? AND utilisateur=?", (i, u["id"])).fetchone()
+    r = con.execute("SELECT * FROM itineraires WHERE id=%s AND utilisateur=%s", (i, u["id"])).fetchone()
     if not r:
         raise HTTPException(404, "Itinéraire introuvable")
     return r
@@ -440,24 +397,24 @@ def itin_de(con, i, u):
 
 @app.get("/api/itineraires/{i}")
 def lire_itineraire(i: str, lecteur=Depends(utilisateur_optionnel), con=Depends(base)):
-    r = con.execute("SELECT * FROM itineraires WHERE id=?", (i,)).fetchone()
+    r = con.execute("SELECT * FROM itineraires WHERE id=%s", (i,)).fetchone()
     if not r or not (r["partage"] or (lecteur and lecteur["id"] == r["utilisateur"])):
         raise HTTPException(404, "Itinéraire introuvable")
-    return itin_json(r, con.execute("SELECT * FROM utilisateurs WHERE id=?", (r["utilisateur"],)).fetchone(), lecteur)
+    return itin_json(r, con.execute("SELECT * FROM utilisateurs WHERE id=%s", (r["utilisateur"],)).fetchone(), lecteur)
 
 
 @app.patch("/api/itineraires/{i}")
 def modifier_itineraire(i: str, d: ModifItineraire, u=Depends(utilisateur), con=Depends(base)):
     itin_de(con, i, u)
     for k, v in d.model_dump(exclude_none=True).items():  # colonnes du modèle uniquement
-        con.execute(f"UPDATE itineraires SET {k}=? WHERE id=?", (int(v) if isinstance(v, bool) else v, i))
+        con.execute(f"UPDATE itineraires SET {k}=%s WHERE id=%s", (int(v) if isinstance(v, bool) else v, i))
     return itin_json(itin_de(con, i, u), u, u)
 
 
 @app.delete("/api/itineraires/{i}", status_code=204)
 def supprimer_itineraire(i: str, u=Depends(utilisateur), con=Depends(base)):
     itin_de(con, i, u)
-    con.execute("DELETE FROM itineraires WHERE id=?", (i,))
+    con.execute("DELETE FROM itineraires WHERE id=%s", (i,))
 
 
 @app.get("/api/itineraires/{i}/gpx")
@@ -472,7 +429,7 @@ def gpx_d_itineraire(i: str, u=Depends(utilisateur), con=Depends(base)):
 @app.get("/api/communaute/itineraires")
 def itineraires_partages(sport: Optional[Sport] = None, lecteur=Depends(utilisateur_optionnel), con=Depends(base)):
     sql = ("SELECT i.*, u.nom un, u.masquer_depart um FROM itineraires i JOIN utilisateurs u ON u.id=i.utilisateur "
-           "WHERE i.partage=1 AND u.visibilite_profil!='prive'" + (" AND i.sport=?" if sport else "") +
+           "WHERE i.partage=1 AND u.visibilite_profil!='prive'" + (" AND i.sport=%s" if sport else "") +
            " ORDER BY i.cree DESC LIMIT 50")
     out = []
     for r in con.execute(sql, (sport,) if sport else ()):
@@ -522,12 +479,11 @@ def resume_activite(con, a, proprietaire, lecteur):
             "denivele": a["denivele"], "visibilite": a["visibilite"], "auteur": proprietaire["nom"],
             "description": a["description"] or "",
             "ressenti": a["ressenti"] if lid == proprietaire["id"] else None,  # personnel : l'auteur seulement
-            "avatar": avatar_url(proprietaire) if "avatar" in proprietaire.keys() else None,
             "trace": trace_publique(pts, proprietaire, lecteur),
-            "jaimes": con.execute("SELECT COUNT(*) FROM jaimes WHERE activite=?", (a["id"],)).fetchone()[0],
-            "aime": lid is not None and con.execute("SELECT 1 FROM jaimes WHERE activite=? AND utilisateur=?",
+            "jaimes": con.execute("SELECT COUNT(*) AS n FROM jaimes WHERE activite=%s", (a["id"],)).fetchone()["n"],
+            "aime": lid is not None and con.execute("SELECT 1 FROM jaimes WHERE activite=%s AND utilisateur=%s",
                                                     (a["id"], lid)).fetchone() is not None,
-            "commentaires": con.execute("SELECT COUNT(*) FROM commentaires WHERE activite=?", (a["id"],)).fetchone()[0],
+            "commentaires": con.execute("SELECT COUNT(*) AS n FROM commentaires WHERE activite=%s", (a["id"],)).fetchone()["n"],
             "strava": {"statut": a["strava_statut"], "erreur": a["strava_erreur"],
                        "activite": a["strava_activite"]} if lid == proprietaire["id"] else None}
 
@@ -538,37 +494,37 @@ def enregistrer_activite(id_client: str, d: Activite, u=Depends(utilisateur), co
     if not re.match(r"^[\w.-]{1,40}$", id_client):
         raise HTTPException(422, "Identifiant invalide")
     nom = d.nom or f"{'Sortie vélo' if d.sport == 'velo' else 'Course'} du {time.strftime('%d/%m/%Y', time.localtime(d.debut))}"
-    existante = con.execute("SELECT * FROM activites WHERE utilisateur=? AND id_client=?", (u["id"], id_client)).fetchone()
+    existante = con.execute("SELECT * FROM activites WHERE utilisateur=%s AND id_client=%s", (u["id"], id_client)).fetchone()
     vals = (nom, d.sport, d.debut, d.duree, d.duree_totale, d.distance, d.denivele, json.dumps(d.splits),
             json.dumps(d.segments), d.itineraire)
     if existante:
-        con.execute("UPDATE activites SET nom=?, sport=?, debut=?, duree=?, duree_totale=?, distance=?, denivele=?, "
-                    "splits=?, segments=?, itineraire=? WHERE id=?", (*vals, existante["id"]))
+        con.execute("UPDATE activites SET nom=%s, sport=%s, debut=%s, duree=%s, duree_totale=%s, distance=%s, denivele=%s, "
+                    "splits=%s, segments=%s, itineraire=%s WHERE id=%s", (*vals, existante["id"]))
         i = existante["id"]
     else:
         i = uuid.uuid4().hex[:16]
         con.execute("INSERT INTO activites(id, utilisateur, id_client, nom, sport, debut, duree, duree_totale, distance, "
-                    "denivele, splits, segments, itineraire, visibilite, cree) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    "denivele, splits, segments, itineraire, visibilite, cree) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     (i, u["id"], id_client, *vals, d.visibilite or u["visibilite_activites"], time.time()))
     if d.visibilite:
-        con.execute("UPDATE activites SET visibilite=? WHERE id=?", (d.visibilite, i))
+        con.execute("UPDATE activites SET visibilite=%s WHERE id=%s", (d.visibilite, i))
     if d.description is not None or d.ressenti is not None:
-        con.execute("UPDATE activites SET description=COALESCE(?, description), ressenti=? WHERE id=?",
+        con.execute("UPDATE activites SET description=COALESCE(%s, description), ressenti=%s WHERE id=%s",
                     (d.description, d.ressenti, i))
-    return resume_activite(con, con.execute("SELECT * FROM activites WHERE id=?", (i,)).fetchone(), u, u)
+    return resume_activite(con, con.execute("SELECT * FROM activites WHERE id=%s", (i,)).fetchone(), u, u)
 
 
 @app.get("/api/moi/activites")
 def mes_activites(u=Depends(utilisateur), con=Depends(base)):
     return [resume_activite(con, a, u, u)
-            for a in con.execute("SELECT * FROM activites WHERE utilisateur=? ORDER BY debut DESC", (u["id"],))]
+            for a in con.execute("SELECT * FROM activites WHERE utilisateur=%s ORDER BY debut DESC", (u["id"],))]
 
 
 def activite_visible(con, i, lecteur):
-    a = con.execute("SELECT * FROM activites WHERE id=?", (i,)).fetchone()
+    a = con.execute("SELECT * FROM activites WHERE id=%s", (i,)).fetchone()
     if not a:
         raise HTTPException(404, "Activité introuvable")
-    prop = con.execute("SELECT * FROM utilisateurs WHERE id=?", (a["utilisateur"],)).fetchone()
+    prop = con.execute("SELECT * FROM utilisateurs WHERE id=%s", (a["utilisateur"],)).fetchone()
     if not peut_voir(con, lecteur, prop["id"], a["visibilite"]):
         raise HTTPException(404, "Activité introuvable")
     return a, prop
@@ -581,7 +537,7 @@ def lire_activite(i: str, lecteur=Depends(utilisateur_optionnel), con=Depends(ba
 
 
 def mon_activite(con, i, u):
-    a = con.execute("SELECT * FROM activites WHERE id=? AND utilisateur=?", (i, u["id"])).fetchone()
+    a = con.execute("SELECT * FROM activites WHERE id=%s AND utilisateur=%s", (i, u["id"])).fetchone()
     if not a:
         raise HTTPException(404, "Activité introuvable")
     return a
@@ -591,7 +547,7 @@ def mon_activite(con, i, u):
 def modifier_activite(i: str, d: ModifActivite, u=Depends(utilisateur), con=Depends(base)):
     mon_activite(con, i, u)
     for k, v in d.model_dump(exclude_none=True).items():  # colonnes du modèle uniquement
-        con.execute(f"UPDATE activites SET {k}=? WHERE id=?", (v, i))
+        con.execute(f"UPDATE activites SET {k}=%s WHERE id=%s", (v, i))
     return resume_activite(con, mon_activite(con, i, u), u, u)
 
 
@@ -599,7 +555,7 @@ def modifier_activite(i: str, d: ModifActivite, u=Depends(utilisateur), con=Depe
 def supprimer_activite(i: str, u=Depends(utilisateur), con=Depends(base)):
     mon_activite(con, i, u)
     for t, c in (("jaimes", "activite"), ("commentaires", "activite"), ("activites", "id")):
-        con.execute(f"DELETE FROM {t} WHERE {c}=?", (i,))
+        con.execute(f"DELETE FROM {t} WHERE {c}=%s", (i,))
 
 
 def act_dict(a):
@@ -618,9 +574,9 @@ def gpx_d_activite(i: str, u=Depends(utilisateur), con=Depends(base)):
 def fil(u=Depends(utilisateur), con=Depends(base)):
     """Activités des personnes suivies (et les miennes), visibles par moi, les plus récentes d'abord."""
     lignes = con.execute(
-        "SELECT a.* FROM activites a WHERE a.utilisateur=? OR (a.visibilite IN ('public','abonnes') AND a.utilisateur IN "
-        "(SELECT suivi FROM abonnements WHERE suiveur=?)) ORDER BY a.debut DESC LIMIT 50", (u["id"], u["id"])).fetchall()
-    return [resume_activite(con, a, con.execute("SELECT * FROM utilisateurs WHERE id=?", (a["utilisateur"],)).fetchone(), u)
+        "SELECT a.* FROM activites a WHERE a.utilisateur=%s OR (a.visibilite IN ('public','abonnes') AND a.utilisateur IN "
+        "(SELECT suivi FROM abonnements WHERE suiveur=%s)) ORDER BY a.debut DESC LIMIT 50", (u["id"], u["id"])).fetchall()
+    return [resume_activite(con, a, con.execute("SELECT * FROM utilisateurs WHERE id=%s", (a["utilisateur"],)).fetchone(), u)
             for a in lignes]
 
 
@@ -628,19 +584,19 @@ def fil(u=Depends(utilisateur), con=Depends(base)):
 def decouvrir(lecteur=Depends(utilisateur_optionnel), con=Depends(base)):
     lignes = con.execute("SELECT a.* FROM activites a JOIN utilisateurs u ON u.id=a.utilisateur WHERE a.visibilite='public' "
                          "AND u.visibilite_profil='public' ORDER BY a.debut DESC LIMIT 30").fetchall()
-    return [resume_activite(con, a, con.execute("SELECT * FROM utilisateurs WHERE id=?", (a["utilisateur"],)).fetchone(),
+    return [resume_activite(con, a, con.execute("SELECT * FROM utilisateurs WHERE id=%s", (a["utilisateur"],)).fetchone(),
                             lecteur) for a in lignes]
 
 
 @app.post("/api/activites/{i}/jaime", status_code=204)
 def aimer(i: str, u=Depends(utilisateur), con=Depends(base)):
     activite_visible(con, i, u)
-    con.execute("INSERT OR IGNORE INTO jaimes VALUES (?,?)", (u["id"], i))
+    con.execute("INSERT INTO jaimes VALUES (%s,%s) ON CONFLICT DO NOTHING", (u["id"], i))
 
 
 @app.delete("/api/activites/{i}/jaime", status_code=204)
 def ne_plus_aimer(i: str, u=Depends(utilisateur), con=Depends(base)):
-    con.execute("DELETE FROM jaimes WHERE utilisateur=? AND activite=?", (u["id"], i))
+    con.execute("DELETE FROM jaimes WHERE utilisateur=%s AND activite=%s", (u["id"], i))
 
 
 class Commentaire(BaseModel):
@@ -651,14 +607,14 @@ class Commentaire(BaseModel):
 def commentaires(i: str, lecteur=Depends(utilisateur_optionnel), con=Depends(base)):
     activite_visible(con, i, lecteur)
     return [{"id": r["id"], "auteur": r["nom"], "texte": r["texte"], "cree": r["cree"]} for r in con.execute(
-        "SELECT c.*, u.nom FROM commentaires c JOIN utilisateurs u ON u.id=c.utilisateur WHERE activite=? ORDER BY cree", (i,))]
+        "SELECT c.*, u.nom FROM commentaires c JOIN utilisateurs u ON u.id=c.utilisateur WHERE activite=%s ORDER BY cree", (i,))]
 
 
 @app.post("/api/activites/{i}/commentaires", status_code=201)
 def commenter(i: str, d: Commentaire, req: Request, u=Depends(utilisateur), con=Depends(base)):
     limiter(req, "commentaire", 20)
     activite_visible(con, i, u)
-    con.execute("INSERT INTO commentaires(utilisateur, activite, texte, cree) VALUES (?,?,?,?)",
+    con.execute("INSERT INTO commentaires(utilisateur, activite, texte, cree) VALUES (%s,%s,%s,%s)",
                 (u["id"], i, d.texte.strip(), time.time()))
     return commentaires(i, u, con)
 
@@ -685,7 +641,7 @@ def generer_boucles(d: Demande, req: Request):
 
 # --- Strava ---
 def etat_strava(con, uid):
-    ligne = con.execute("SELECT nom, portee FROM strava WHERE utilisateur=?", (uid,)).fetchone()
+    ligne = con.execute("SELECT nom, portee FROM strava WHERE utilisateur=%s", (uid,)).fetchone()
     return {"configure": config.strava_configure(), "connecte": bool(ligne),
             "athlete": ligne["nom"] if ligne else None}
 
@@ -707,15 +663,15 @@ def strava_connexion(retour: str = "/espace.html#profil", u=Depends(utilisateur)
     if not retour.startswith("/") or retour.startswith("//"):
         retour = "/espace.html#profil"  # pas de redirection vers un autre site
     etat = secrets.token_urlsafe(24)
-    con.execute("INSERT INTO etats_oauth VALUES (?,?,?,?)", (etat, u["id"], retour, time.time() + 600))
+    con.execute("INSERT INTO etats_oauth VALUES (%s,%s,%s,%s)", (etat, u["id"], retour, time.time() + 600))
     return {"url": strava.url_autorisation(etat)}
 
 
 @app.get("/api/strava/retour")
 def strava_retour(state: str = "", code: str = "", scope: str = "", error: str = "", con=Depends(base)):
     exiger_strava()
-    e = con.execute("SELECT * FROM etats_oauth WHERE etat=? AND expire>?", (state, time.time())).fetchone()
-    con.execute("DELETE FROM etats_oauth WHERE etat=?", (state,))
+    e = con.execute("SELECT * FROM etats_oauth WHERE etat=%s AND expire>%s", (state, time.time())).fetchone()
+    con.execute("DELETE FROM etats_oauth WHERE etat=%s", (state,))
     if not e:
         return HTMLResponse(page_retour("Lien expiré : relance la connexion à Strava depuis Loopy."), 400)
     if error or not code:
@@ -727,7 +683,9 @@ def strava_retour(state: str = "", code: str = "", scope: str = "", error: str =
     except strava.ErreurStrava:
         return RedirectResponse(avec_statut(e["retour"], "erreur"), 303)
     ath = j.get("athlete") or {}
-    con.execute("INSERT OR REPLACE INTO strava VALUES (?,?,?,?,?,?,?)",
+    con.execute("INSERT INTO strava VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (utilisateur) DO UPDATE SET "
+                "athlete=EXCLUDED.athlete, nom=EXCLUDED.nom, acces=EXCLUDED.acces, "
+                "rafraichissement=EXCLUDED.rafraichissement, expire=EXCLUDED.expire, portee=EXCLUDED.portee",
                 (e["utilisateur"], str(ath.get("id", "")), f"{ath.get('firstname', '')} {ath.get('lastname', '')}".strip(),
                  j["access_token"], j["refresh_token"], j["expires_at"], scope))
     return RedirectResponse(avec_statut(e["retour"], "ok"), 303)
@@ -746,10 +704,10 @@ def page_retour(texte):
 
 @app.delete("/api/strava", status_code=204)
 def strava_deconnexion(u=Depends(utilisateur), con=Depends(base)):
-    ligne = con.execute("SELECT acces FROM strava WHERE utilisateur=?", (u["id"],)).fetchone()
+    ligne = con.execute("SELECT acces FROM strava WHERE utilisateur=%s", (u["id"],)).fetchone()
     if ligne:
         strava.revoquer(ligne["acces"])
-        con.execute("DELETE FROM strava WHERE utilisateur=?", (u["id"],))
+        con.execute("DELETE FROM strava WHERE utilisateur=%s", (u["id"],))
 
 
 def statut_envoi(a):
@@ -771,7 +729,7 @@ def envoyer_strava(i: str, req: Request, u=Depends(utilisateur), con=Depends(bas
     except strava.ErreurStrava as e:
         raise HTTPException(502, str(e))
     st, act, err = strava.interpreter(rep)
-    con.execute("UPDATE activites SET strava_upload=?, strava_statut=?, strava_erreur=?, strava_activite=? WHERE id=?",
+    con.execute("UPDATE activites SET strava_upload=%s, strava_statut=%s, strava_erreur=%s, strava_activite=%s WHERE id=%s",
                 (rep.get("id_str") or str(rep.get("id", "")), st, err, act, i))
     return statut_envoi(mon_activite(con, i, u))
 
@@ -785,7 +743,7 @@ def suivre_strava(i: str, u=Depends(utilisateur), con=Depends(base)):
             st, act, err = strava.interpreter(strava.statut(strava.jeton_valide(con, u["id"]), a["strava_upload"]))
         except strava.ErreurStrava as e:
             raise HTTPException(502, str(e))
-        con.execute("UPDATE activites SET strava_statut=?, strava_erreur=?, strava_activite=? WHERE id=?", (st, err, act, i))
+        con.execute("UPDATE activites SET strava_statut=%s, strava_erreur=%s, strava_activite=%s WHERE id=%s", (st, err, act, i))
         a = mon_activite(con, i, u)
     return statut_envoi(a)
 

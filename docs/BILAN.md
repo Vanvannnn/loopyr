@@ -15,7 +15,7 @@
 | **GPX de l'itinéraire** (tracé seul, sans heure, `boucle_10km_velo.gpx`) | `gpx.gpx_itineraire`, `commun.js` | Test de structure ; aucune balise `<time>` |
 | **GPX de l'activité** (points horodatés, un segment par pause, type `running` ou `cycling`) | `gpx.gpx` | Tests de structure et d'heures |
 | Comptes (inscription, connexion, déconnexion, mot de passe oublié, réinitialisation) : **un seul système** pour l'app et le site | `serveur/app.py`, `compte.py` | Tests serveur et client contre un vrai serveur |
-| Profil : photo, présentation, sport favori, préférences, statistiques, visibilité, masquage du départ, suppression du compte | serveur, site, app | Tests serveur |
+| Profil : présentation, sport favori, préférences, statistiques, visibilité, masquage du départ, suppression du compte | serveur, site, app | Tests serveur |
 | Historique : activités réellement faites, boucles enregistrées, favorites, bien distinguées | app : Historique ; site : espace | Parcours piloté, tests |
 | Synchronisation des sorties et des boucles avec le compte, renvoi automatique de ce qui a été fait hors connexion | `main.synchroniser_*` | Parcours piloté : la sortie simulée apparaît dans le fil |
 | Communauté : suivre, profils publics, fil, j'aime, commentaires, boucles partagées, sorties publiques, recherche de sportifs | serveur, site, app (fil, j'aime) | Tests serveur |

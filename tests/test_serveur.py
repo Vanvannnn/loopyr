@@ -7,9 +7,7 @@ from serveur import config, strava
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "DONNEES", str(tmp_path))
-    monkeypatch.setattr(config, "DB", str(tmp_path / "loopy.db"))
+def client(base_vide):
     from serveur import app as appli
     appli.limiteur.appels.clear()
     with TestClient(appli.app) as c:
@@ -71,15 +69,12 @@ def test_limite_de_debit(client):
     assert client.post("/api/sessions", json={"email": "x@x.fr", "mot_de_passe": "mauvais"}).status_code == 429
 
 
-def test_profil_et_avatar(client):
+def test_profil(client):
     h = compte(client)
     r = client.patch("/api/moi", headers=h, json={"bio": "Coureuse du dimanche", "sport": "velo",
                                                    "preferences": {"relief": "plat"}, "visibilite_activites": "public"})
     assert r.json()["sport"] == "velo" and r.json()["preferences"] == {"relief": "plat"}
-    png = b"\x89PNG\r\n\x1a\n" + b"0" * 100
-    r = client.post("/api/moi/avatar", headers=h, files={"fichier": ("a.png", png, "image/png")})
-    assert client.get(r.json()["avatar"]).content == png
-    assert client.post("/api/moi/avatar", headers=h, files={"fichier": ("a.svg", b"<svg/>", "image/svg+xml")}).status_code == 415
+    assert "avatar" not in r.json() and client.post("/api/moi/avatar", headers=h).status_code in (404, 405)
 
 
 def test_itineraires_favoris_gpx_et_partage(client):
@@ -198,9 +193,8 @@ def test_strava_connexion_envoi_et_suivi(client, monkeypatch):
     assert client.get("/api/strava", headers=h).json()["athlete"] == "Alice L."
 
     from serveur import db
-    con = db.ouvrir()
-    con.execute("UPDATE strava SET expire=?", (time.time() - 10,))  # jeton expiré : il sera rafraîchi
-    con.commit()
+    with db.reserve().connection() as con:
+        con.execute("UPDATE strava SET expire=%s", (time.time() - 10,))  # jeton expiré : il sera rafraîchi
     a = client.put("/api/moi/activites/x1", headers=h, json=activite()).json()
     r = client.post(f"/api/activites/{a['id']}/strava", headers=h).json()
     assert r["statut"] == "en_cours"
@@ -210,7 +204,8 @@ def test_strava_connexion_envoi_et_suivi(client, monkeypatch):
     r = client.get(f"/api/activites/{a['id']}/strava", headers=h).json()
     assert r["statut"] == "pret" and r["url"] == "https://www.strava.com/activities/153243126"
     assert client.post(f"/api/activites/{a['id']}/strava", headers=h).json()["statut"] == "pret"  # pas de doublon
-    assert con.execute("SELECT rafraichissement FROM strava").fetchone()[0] == "rafr2"
+    with db.reserve().connection() as con:
+        assert con.execute("SELECT rafraichissement FROM strava").fetchone()["rafraichissement"] == "rafr2"
 
 
 def test_strava_permission_refusee(client, monkeypatch):

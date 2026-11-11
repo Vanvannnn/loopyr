@@ -42,16 +42,15 @@ def echanger(code):
 
 def jeton_valide(con, uid):
     """Jeton d'accès utilisable (rafraîchi s'il expire dans moins d'une minute), ou ErreurStrava."""
-    ligne = con.execute("SELECT * FROM strava WHERE utilisateur=?", (uid,)).fetchone()
+    ligne = con.execute("SELECT * FROM strava WHERE utilisateur=%s", (uid,)).fetchone()
     if not ligne:
         raise ErreurStrava("Compte Strava non connecté")
     if ligne["expire"] > time.time() + 60:
         return ligne["acces"]
     j = _jeton({"grant_type": "refresh_token", "refresh_token": ligne["rafraichissement"]})
     # Strava peut renvoyer un nouveau jeton de rafraîchissement : l'ancien ne marche alors plus
-    con.execute("UPDATE strava SET acces=?, rafraichissement=?, expire=? WHERE utilisateur=?",
+    con.execute("UPDATE strava SET acces=%s, rafraichissement=%s, expire=%s WHERE utilisateur=%s",
                 (j["access_token"], j.get("refresh_token", ligne["rafraichissement"]), j["expires_at"], uid))
-    con.commit()
     return j["access_token"]
 
 
