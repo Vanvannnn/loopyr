@@ -47,7 +47,7 @@ function boutonTelecharger() {
   const b = document.querySelector(".nav .telecharger");
   if (!b) return;
   if (installee) b.remove();
-  else if (ios) { b.href = "/telecharger.html#iphone"; b.firstChild.textContent = "Installer"; }
+  else if (ios) { b.href = "/telecharger.html#iphone"; }
 }
 
 // en-tête : le lien de compte selon la session
