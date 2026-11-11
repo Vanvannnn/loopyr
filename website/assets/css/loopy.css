@@ -63,11 +63,17 @@ p { margin: 0; max-width: 62ch; }
 .nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
 .nav a { text-decoration: none; padding: 8px 12px; border-radius: var(--r-petit); font-weight: 700; font-size: 1rem; }
 .nav a:hover { background: var(--fond-2); }
+.nav a { white-space: nowrap; }
+.nav a.telecharger { gap: 0; min-height: 40px; padding: 0 16px; font-size: .95rem; margin: 0 4px; }
+.nav a.telecharger:hover { background: var(--peche); }
+.nav a.telecharger[aria-current="page"] { box-shadow: none; border-radius: var(--r-petit); }
 .nav a[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--trace); border-radius: 0; }
 @media (max-width: 640px) {
   .entete .conteneur { gap: 8px; }
   .nav .large { display: none; }
   .nav a { padding: 8px; }
+  .nav a.telecharger { padding: 0 10px; margin: 0; font-size: .9rem; }
+  .nav a[href="/strava.html"] { display: none; }  /* encore dans le pied de page */
 }
 
 /* --- boutons --- */

@@ -1,7 +1,7 @@
 """Serveur Loopy (FastAPI) : comptes, profils, itinéraires, activités, communauté, Strava, génération de
 boucles pour le site, et le site lui-même (dossier website/). Lancer : uvicorn serveur.app:app
 Un seul système de comptes : l'app (jeton Bearer) et le site (même jeton, en cookie HttpOnly) l'utilisent."""
-import contextlib, json, os, re, secrets, smtplib, sys, time, uuid
+import contextlib, json, mimetypes, os, re, secrets, smtplib, sys, time, uuid
 from email.message import EmailMessage
 from typing import Literal, Optional
 
@@ -761,4 +761,7 @@ async def entetes(req: Request, appel):
 
 
 if os.path.isdir(config.SITE):
+    # sans ce type, un téléphone peut enregistrer l'APK en .zip ou refuser de l'installer
+    mimetypes.add_type("application/vnd.android.package-archive", ".apk")
+    mimetypes.add_type("application/manifest+json", ".webmanifest")
     app.mount("/", StaticFiles(directory=config.SITE, html=True), name="site")

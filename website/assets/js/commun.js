@@ -38,6 +38,18 @@ export function exigerConnexion() {
   });
 }
 
+// iPhone et iPad (iPadOS se présente comme un Mac tactile) ; installée = ouverte depuis l'écran d'accueil
+export const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+export const installee = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+// en-tête : le bouton « Télécharger » mène aux étapes iPhone sur iOS (pas d'APK), disparaît dans l'appli installée
+function boutonTelecharger() {
+  const b = document.querySelector(".nav .telecharger");
+  if (!b) return;
+  if (installee) b.remove();
+  else if (ios) { b.href = "/telecharger.html#iphone"; b.firstChild.textContent = "Installer"; }
+}
+
 // en-tête : le lien de compte selon la session
 export async function entete() {
   const lien = document.querySelector("[data-compte]");
@@ -118,4 +130,5 @@ export const ICONES = {
   course: '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="14.5" cy="4" r="2"/><path d="m8 21 3-5 3 2v4M6.5 12.5 9 9.5l4-.5 2.5 3.5 3 .5M11.5 16 13 9"/></svg>',
 };
 
+boutonTelecharger();
 entete();

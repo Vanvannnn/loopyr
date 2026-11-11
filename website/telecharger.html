@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Télécharger Loopy</title>
+<meta name="description" content="Installer Loopy : l'application Android, ou sur l'écran d'accueil de ton iPhone.">
+<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/assets/img/app-icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Loopy">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F4EFE6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121A16" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="/assets/css/loopy.css">
+<style>
+  .tete-dl { display: flex; gap: 28px; align-items: center; padding: 48px 0 8px; flex-wrap: wrap; }
+  .tete-dl img { width: 112px; height: 112px; border-radius: 26px; box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
+  .tete-dl h1 { font-size: clamp(2.6rem, 7vw, 4.4rem); margin: 0 0 8px; }
+  .tete-dl p { font-size: 1.15rem; margin: 0; }
+  .atouts { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 0; padding: 0; list-style: none; }
+  .atouts li { padding: 6px 14px; border-radius: 999px; background: var(--fond-2); font-weight: 700; font-size: .95rem; }
+  .plateformes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 24px; margin: 40px 0 0; }
+  .plateforme { border: 2px solid var(--fond-3); border-radius: 22px; padding: 28px; display: flex; flex-direction: column; gap: 14px; }
+  .plateforme.principale { border-color: var(--encre); }
+  .plateforme h2 { font-size: 2rem; margin: 0; display: flex; align-items: center; gap: 12px; }
+  .plateforme h2 svg { width: 34px; height: 34px; flex-shrink: 0; }
+  .plateforme .bouton { align-self: stretch; }
+  .plateforme .bouton[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+  .fiche { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 18px; margin: 0; font-size: .95rem; }
+  .fiche dt { color: var(--brume); }
+  .fiche dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+  .fiche code { font-size: .78rem; font-weight: 400; }
+  .confiance { margin: 64px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 40px; }
+  .confiance h2 { font-size: 1.8rem; margin-bottom: 14px; }
+  .confiance ol, .confiance ul { margin: 0; padding-left: 1.2em; }
+  .confiance li + li { margin-top: 8px; }
+  .encart { margin-top: 14px; padding: 14px 18px; border-radius: var(--r-petit); background: var(--fond-2); }
+  .etapes-ios { margin: 0; padding-left: 1.3em; font-size: 1.05rem; }
+  .etapes-ios li + li { margin-top: 8px; }
+  .etapes-ios .partager { display: inline; width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
+  .plateforme.principale .etapes-ios { font-size: 1.1rem; }
+</style>
+</head>
+<body>
+<header class="entete">
+  <div class="conteneur">
+    <a class="marque" href="/" aria-label="Loopy, accueil">
+      <img class="clair" src="/assets/img/loopy-horizontal-couleur-clair.svg" alt="Loopy" width="69" height="34">
+      <img class="sombre" src="/assets/img/loopy-horizontal-sombre.svg" alt="Loopy" width="69" height="34">
+    </a>
+    <nav class="nav" aria-label="Principale">
+      <a href="/creer.html">Créer<span class="large"> une boucle</span></a>
+      <a class="large" href="/communaute.html">Communauté</a>
+      <a href="/strava.html">Strava</a>
+      <a class="bouton signal telecharger" href="/telecharger.html" aria-current="page">Télécharger<span class="large">&nbsp;l'appli</span></a>
+      <a href="/connexion.html" data-compte>Se connecter</a>
+    </nav>
+  </div>
+</header>
+<main class="conteneur">
+  <div class="tete-dl">
+    <img src="/assets/img/app-icon-192.png" alt="" width="112" height="112">
+    <div>
+      <h1>Loopy sur ton téléphone</h1>
+      <p class="doux">Génère ta boucle de course ou de vélo, où que tu sois, et pars.</p>
+    </div>
+  </div>
+  <ul class="atouts" aria-label="En bref">
+    <li>Gratuite</li><li>Sans publicité</li><li>Compte facultatif</li><li>Cartes OpenStreetMap</li>
+  </ul>
+
+  <div class="plateformes">
+    <section class="plateforme principale" aria-labelledby="t-android">
+      <h2 id="t-android"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M17.6 9.48l1.84-3.18a.38.38 0 10-.66-.38l-1.86 3.22a11.5 11.5 0 00-9.84 0L5.22 5.92a.38.38 0 10-.66.38L6.4 9.48A10.8 10.8 0 001 18h22a10.8 10.8 0 00-5.4-8.52zM7 15.25a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5zm10 0a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5z"/></svg>Android</h2>
+      <p>L'appli complète : navigation guidée à la voix, enregistrement de ta sortie même écran éteint, historique et export GPX.</p>
+      <a class="bouton signal" id="apk" href="/downloads/loopy.apk" download="loopy.apk">Télécharger pour Android</a>
+      <dl class="fiche">
+        <dt>Version</dt><dd>0.6</dd>
+        <dt>Taille</dt><dd id="taille">…</dd>
+        <dt>Compatible</dt><dd>Android 7.0 ou plus récent</dd>
+        <dt>Empreinte SHA-256</dt><dd><code id="sha">fdb7f5bb2d7067acec98f173502b8146a0c09d2fadec250bec94761a0732fce4</code></dd>
+      </dl>
+    </section>
+
+    <section class="plateforme" id="iphone" aria-labelledby="t-ios">
+      <h2 id="t-ios"><svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.97-3.46a4.24 4.24 0 00-3.34-1.8c-1.42-.15-2.77.83-3.5.83-.72 0-1.83-.81-3.01-.79a4.46 4.46 0 00-3.77 2.29c-1.61 2.79-.41 6.92 1.16 9.18.77 1.1 1.68 2.35 2.88 2.3 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.73c1.25-.02 2.03-1.12 2.79-2.23a9.9 9.9 0 001.27-2.6 4.03 4.03 0 01-2.46-3.7zM14.07 5.86A4.03 4.03 0 0015 2.94a4.1 4.1 0 00-2.65 1.37 3.84 3.84 0 00-.96 2.8 3.4 3.4 0 002.68-1.25z"/></svg>iPhone</h2>
+      <p>Installe Loopy depuis Safari : elle s'ajoute à ton écran d'accueil et s'ouvre en plein écran, comme une appli. Rien à télécharger depuis l'App Store.</p>
+      <p class="encart" id="ios-installee" hidden>Loopy est déjà installée sur cet appareil.</p>
+      <ol class="etapes-ios" id="etapes-iphone">
+        <li>Ouvre <strong>loopyr.onrender.com</strong> dans <strong>Safari</strong>.</li>
+        <li>Touche <strong>Partager</strong> <svg class="partager" viewBox="0 0 24 24" aria-label="(carré avec une flèche vers le haut)" role="img" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4M6 11H5a1 1 0 00-1 1v8a1 1 0 001 1h14a1 1 0 001-1v-8a1 1 0 00-1-1h-1"/></svg> en bas de l'écran.</li>
+        <li>Choisis <strong>Sur l'écran d'accueil</strong>, puis <strong>Ajouter</strong>.</li>
+      </ol>
+      <p class="doux">Sur iPhone, Loopy crée tes boucles et tes trajets, montre ton historique et la communauté, avec le même compte que sur Android. Elle n'enregistre pas une sortie écran éteint : exporte le GPX de ta boucle dans ton appli de course pour la suivre.</p>
+    </section>
+  </div>
+
+  <div class="confiance">
+    <section>
+      <h2>Installer sur Android</h2>
+      <ol>
+        <li>Touche <strong>Télécharger pour Android</strong>, puis ouvre le fichier téléchargé.</li>
+        <li>Android demande d'autoriser ton navigateur à installer des applis : accepte pour ce fichier.</li>
+        <li>Touche <strong>Installer</strong>. Une mise à jour s'installe par-dessus et garde ton historique.</li>
+      </ol>
+      <p class="encart">Android affiche un avertissement pour toute appli installée hors du Play Store. C'est normal : Loopy n'est pas encore publiée sur le Play Store, l'avertissement ne signale pas un problème dans l'appli.</p>
+    </section>
+    <section>
+      <h2>Ce que l'appli demande</h2>
+      <ul>
+        <li><strong>Position</strong> : tracer la boucle autour de toi et enregistrer ta sortie.</li>
+        <li><strong>Notifications</strong> : afficher la sortie en cours, écran éteint.</li>
+        <li><strong>Internet</strong> : calculer les itinéraires et afficher les cartes.</li>
+      </ul>
+      <p class="encart">Tes sorties restent sur ton téléphone. Elles ne sont envoyées au serveur que si tu crées un compte, et tu choisis qui les voit.</p>
+    </section>
+    <section>
+      <h2>Vérifier le fichier</h2>
+      <p>L'empreinte SHA-256 ci-dessus permet de vérifier que le fichier reçu est bien celui publié ici, sans modification. Sur ordinateur :</p>
+      <p class="encart"><code>sha256sum loopy.apk</code><br>(Windows : <code>certutil -hashfile loopy.apk SHA256</code>)</p>
+    </section>
+  </div>
+</main>
+<footer class="pied">
+  <div class="conteneur">
+    <p>Données cartographiques © les contributeurs <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p>
+    <nav aria-label="Pied de page"><a href="/creer.html">Créer une boucle</a><a href="/communaute.html">Communauté</a><a href="/strava.html">Importer sur Strava</a></nav>
+  </div>
+</footer>
+<script type="module">
+import { ios, installee } from "/assets/js/commun.js";
+// sur iPhone, la carte iPhone passe en premier et devient la principale ; déjà installée : on le dit
+if (ios) {
+  const a = document.querySelector(".plateforme.principale"), i = document.getElementById("iphone");
+  a.classList.remove("principale"); i.classList.add("principale"); i.parentNode.insertBefore(i, a);
+}
+if (installee) { document.getElementById("ios-installee").hidden = false; document.getElementById("etapes-iphone").hidden = true; }
+// la taille réelle du fichier publié ; s'il manque, le bouton est désactivé plutôt que de mener à une erreur
+const apk = document.getElementById("apk"), taille = document.getElementById("taille");
+fetch(apk.getAttribute("href"), { method: "HEAD" }).then((r) => {
+  const n = +r.headers.get("content-length");
+  if (!r.ok || !n) throw new Error();
+  taille.textContent = `${(n / 1048576).toFixed(1).replace(".", ",")} Mo`;
+}).catch(() => {
+  taille.textContent = "indisponible pour le moment";
+  apk.setAttribute("aria-disabled", "true");
+});
+</script>
+<script type="module" src="/assets/js/commun.js"></script>
+</body>
+</html>
