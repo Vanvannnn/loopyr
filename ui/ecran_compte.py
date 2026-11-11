@@ -201,7 +201,7 @@ class EcranProfil(Screen):
         c.add_widget(section("L'app"))
         c.add_widget(Bouton("Thème jour" if widgets.theme == "nuit" else "Thème nuit",
                             lambda *_: self.app.changer_theme(), "contour", 56, 17))
-        c.add_widget(lab("Adresse du serveur Loopy (comptes, communauté, Strava)", 15, BRUME,
+        c.add_widget(lab("Adresse du serveur Loopy (déjà réglée ; à changer seulement pour un autre serveur)", 15, BRUME,
                          size_hint_y=None, height=dp(44)))
         self.url = champ("https://…", self.app.compte.url)
         c.add_widget(self.url)
@@ -214,6 +214,8 @@ class EcranProfil(Screen):
 
     def adresses(self, *_):
         url, moteur = self.url.text.strip().rstrip("/"), self.moteur.text.strip().rstrip("/")
+        url = url or self.app.serveur_defaut  # champ vidé : retour au serveur Loopy officiel
+        self.url.text = url
         for u in (url, moteur):
             if u and not u.startswith(("http://", "https://")):
                 self.l_reg.text = "Une adresse commence par https://"

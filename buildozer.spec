@@ -7,9 +7,9 @@ source.include_exts = py,ttf,brf
 icon.filename = %(source.dir)s/logo/icone.png
 presplash.filename = %(source.dir)s/logo/lancement.png
 android.presplash_color = #F4EFE6
-source.exclude_dirs = tests, bin, .venv, .git, logo, serveur, website, outils, docs
+source.exclude_dirs = tests, bin, .venv, .git, logo, serveur, website, outils, docs, graphify-out, node_modules, .claude, .buildozer
 source.exclude_patterns = requirements-*.txt, compte_rendu*.md
-version = 0.5
+version = 0.6
 # openssl + certifi : HTTPS (moteur d'itinéraires, tuiles OSM, serveur Loopy) avec des certificats à jour
 requirements = hostpython3==3.11.5,python3==3.11.5,kivy==2.3.1,plyer,pyjnius,sqlite3,android,openssl,certifi
 orientation = portrait

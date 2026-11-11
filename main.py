@@ -21,7 +21,8 @@ from ui import widgets
 
 SENS = {"avant": "left", "retour": "right", "monter": "up", "descendre": "down"}
 # PC : le serveur lancé à côté (uvicorn) ; téléphone : l'adresse se règle dans Profil
-SERVEUR_DEFAUT = os.environ.get("LOOPY_SERVEUR", "" if platform == "android" else "http://localhost:8000")
+SERVEUR_DEFAUT = os.environ.get("LOOPY_SERVEUR", "https://loopyr.onrender.com" if platform == "android"
+                                else "http://localhost:8000")
 
 
 class Glisse(SlideTransition):
@@ -70,6 +71,7 @@ class FiletDeSecurite(ExceptionHandler):
 
 
 class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données sur PC
+    serveur_defaut = SERVEUR_DEFAUT
     title = "Loopy"
 
     def build(self):
@@ -84,7 +86,7 @@ class StarvaApp(App):  # nom de classe gardé : il fixe le dossier des données 
         except (OSError, ValueError):
             self.reglages = {}
         self.moteur = BRouter(self.reglages.get("moteur"))
-        self.compte = Compte(self.reglages.get("serveur", SERVEUR_DEFAUT), self.reglages.get("jeton"))
+        self.compte = Compte(self.reglages.get("serveur") or SERVEUR_DEFAUT, self.reglages.get("jeton"))
         self.stockage = Stockage(os.path.join(self.user_data_dir, "activites"),
                                  ancien_profil=os.path.join(self.user_data_dir, "profil.json"))
         self.itineraires = Stockage(os.path.join(self.user_data_dir, "itineraires"), champs=RESUME_ITINERAIRE, tri="cree")
